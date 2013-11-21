@@ -3,10 +3,13 @@ Import a Bloomberg data file.
 
 """
 
+from autologging import logged, traced, TracedMethods
 import pytz
-import ohlc from data
+from lib.data import ohlc
+from lib import common
 
-class Import (object):
+
+class Import (object, metaclass= TracedMethods(common.log, "parse", "parse_value")):
 
     #@staticmethod
     #def parse_file (filename):
@@ -37,33 +40,44 @@ class Import (object):
         reading = False
         store = None
         ticker = ""
+        line_count = 0
 
         for line in reader.readlines():
-            line = line.strip()
+            line_count = line_count + 1
+            common.log.debug(line_count)
+            line = line.decode("utf-8").strip()
             if not reading and line == "START-OF-DATA":
+                common.log.debug("start reading")
                 reading = True
             elif reading and line == "END-OF-DATA":
+                common.log.debug("stop reading")
                 break
             elif reading:
                 vals = line.split("|")
 
                 if ticker == "":
+                    common.log.debug("first ticker")
                     ticker = vals[0]
-                    store = Ohlc.store(ticker)
+                    store = ohlc.get_store(ticker)
                 elif ticker != vals[0]:
                     ticker = vals[0]
                     store.close()
-                    store = Ohlc.store(ticker)
- 
-                tickTime = datetime.datetime.strptime(vals[3], "%Y/%m/%d")
-                tickTime = tickTime.replace(tzinfo=pytz.utc)
-                store.add(tickTime, Import.parse_value(vals[4])
+                    store = ohlc.get_store(ticker)
+
+                if len(vals[3].strip()) == 0: 
+                    tickTime = datetime.datetime.strptime(vals[3], "%Y/%m/%d")
+                    tickTime = tickTime.replace(tzinfo=pytz.utc)
+                    store.add(tickTime, Import.parse_value(vals[4])
                                   , Import.parse_value(vals[5])
                                   , Import.parse_value(vals[6])
                                   , Import.parse_value(vals[7])
                                   , Import.parse_value(vals[8])
-                                  , Import.parse_value(vals[9])) 
+                                  , Import.parse_value(vals[9])
+                                  , Import.parse_value(vals[10])) 
 
         if store:
             store.close()
+
+        common.log.debug("parsed %s lines" % line_count)
+
 

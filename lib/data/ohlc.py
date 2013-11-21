@@ -3,12 +3,22 @@ Data class - open, high, low, close, volume and open interest.
 
 """
 
+from autologging import logged, traced, TracedMethods
 import time
-import config
+from lib import common
 from tables import *
 
-class Ohlc (object):
 
+@traced(common.log)
+def get_store (ident):
+    """
+    Open a store.
+    """
+    filters = Filters(complevel = 9, complib = "blosc", fletcher32 = False)
+    return Ohlc(common.Path.get("store", ident), filters)
+
+
+class Ohlc (object, metaclass = TracedMethods(common.log, "__init__", "add", "close")):
 
     class Ohlc_table (IsDescription):
         time            = Int64Col()
@@ -18,25 +28,20 @@ class Ohlc (object):
         close           = Float64Col()
         volume          = Float64Col()
         openInterest    = Float64Col()
+        actual          = Float64Col()
 
 
-    def __init__ (self, hdf_file, filters):
-        if "data" in hdf_file.root:
-            self._table = hdf_file.root.data
+    def __init__ (self, file_path, filters):
+
+        self._file = openFile(file_path, mode="w", title="")
+
+        if "data" in self._file.root:
+            self._table = self._file.root.data
         else:
-            self._table = hdf_file.createTable(hdf_file.root, 'data', Ohlc.Ohlc_table, "data", filters=filters)
+            self._table = self._file.createTable(self._file.root, 'data', Ohlc.Ohlc_table, "data", filters=filters)
 
 
-    @staticmethod
-    def store (ident):
-        """
-        Open a store.
-        """
-        filters = Filters(complevel = 9, complib = "blosc", fletcher32 = False)
-        return Ohlc(config.Path.get("store", ident), filters)
-
-
-    def add (self, t, open, high, low, close, volume, open_interest, raw=False):
+    def add (self, t, open, high, low, close, volume, open_interest, actual=None, raw=False):
         """
         Add a value to the time series.
         """
@@ -51,6 +56,7 @@ class Ohlc (object):
         row['close'] = close
         row['volume'] = volume
         row['openInterest'] = open_interest
+        row['actual'] = actual
         row.append()
 
 
@@ -59,5 +65,6 @@ class Ohlc (object):
         Close the file and flush data.
         """
         self._table.flush()
+        self._file.close()
 
 
