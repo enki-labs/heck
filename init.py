@@ -25,6 +25,3 @@ def test_reuters_map ():
             schema.insert("symbol_resolve", values=vals)
 
 
-#if __name__ == '__main__':
-#    unittest.main()
-
