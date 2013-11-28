@@ -9,6 +9,7 @@ apt-get install -y python3-minimal
 apt-get install -y python3-dev
 apt-get install -y libboost-python-dev
 apt-get install -y libssl-dev
+apt-get install -y python3-nose
 
 easy_install3 logging
 easy_install3 autologging
@@ -66,7 +67,7 @@ popd
 #
 
 ./hdfs-start.sh
-hdfs dfs -mkdir -p /inbound/bloomberg
+#hdfs dfs -mkdir -p /inbound/bloomberg
 
 easy_install3 pywebhdfs
 

@@ -9,6 +9,6 @@ def table (metadata):
     return schema.Table('symbol_resolve', metadata,
            schema.Column('symbol', types.Unicode(255), primary_key=True),
            schema.Column('source', types.Unicode(255), primary_key=True),
-           schema.Column('bloomberg', types.Unicode(255)))
+           schema.Column('resolve', types.Unicode(255)))
 
 
