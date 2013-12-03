@@ -6,7 +6,7 @@ Import a Bloomberg data file.
 from autologging import logged, traced, TracedMethods
 import pytz
 import re
-from lib.data import instrument
+from lib.data import series
 from lib import common
 
 
@@ -101,12 +101,11 @@ class Import (object, metaclass= TracedMethods(common.log, "parse")):
 
 
     @staticmethod
-    def handler_future (vals):
+    def handler_future (vals, inst):
         """
         Parse Future details
         """
-        #inst = instrument.Instrument(vals[0]
-        pass
+        return inst
 
 
     @staticmethod
@@ -114,8 +113,7 @@ class Import (object, metaclass= TracedMethods(common.log, "parse")):
         """
         Parse Index details
         """
-        pass
-
+        return inst
 
     @staticmethod
     def handler_swap (vals):
@@ -172,7 +170,10 @@ class Import (object, metaclass= TracedMethods(common.log, "parse")):
         for line in reader.readlines():
             line_count = line_count + 1
             common.log.debug(line_count)
-            line = line.decode("utf-8").strip()
+            if not isinstance(line, str): 
+                line = line.decode("utf-8").strip()
+            else:
+                line = line.strip()
             if not reading and line == "START-OF-DATA":
                 common.log.debug("start reading")
                 reading = True
@@ -181,11 +182,19 @@ class Import (object, metaclass= TracedMethods(common.log, "parse")):
                 break
             elif reading:
                 vals = line.split("|")
-                inst = instrument.get(vals[0])
+                inst = series.get_bloomberg(vals[0])
                 if inst == None:
                     common.log.debug("parsing %s" % vals[0])
                     if vals[23] in handlers:
-                        handlers[vals[23]](vals)
+                        detail = parse_symbol(vals[0])
+                        inst = series.Series(detail["symbol"], False)
+                        inst.set("name", vals[4])
+                        inst.set("currency", vals[8])
+                        inst.set("exchange", vals[14])
+                        inst.set("class", detail["class"])
+                        inst.set("type", vals[23])
+                        inst.save()
+                        #handlers[vals[23]](vals)
                     else:
                         raise Exception("Unknown type %s" % vals[23])
 
