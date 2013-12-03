@@ -75,14 +75,6 @@ test
 test
 """
     bloomberg_series.Import.parse(StringIO(testdata))
-    with schema.select("series") as a:
-        print("(((((((((((((((((((((((((((((")
-        print(a.first())
-        for a1 in a:
-            print(type(a1))
-            print(dir(a1))
-            print(a1)
-     
     ok_(schema.select_one("series", symbol="ABC") != None)
     ok_(schema.select_one("series", symbol="DEFG") != None)
 
