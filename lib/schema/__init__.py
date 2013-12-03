@@ -27,7 +27,7 @@ for _,_,files in os.walk(__path__[0]):
         parts = os.path.splitext(fname)
         if len(parts) == 2 and parts[1] == ".py" and not parts[0] == "__init__":
             common.log.debug("import %s" % parts[0])
-            imported_schema = __import__("schema." + parts[0], globals(), locals(), ["table"], -1)
+            imported_schema = __import__("lib.schema." + parts[0], globals(), locals(), ["table"], -1)
             tables[parts[0]] = imported_schema.table(base)
     break
 
