@@ -3,11 +3,14 @@ Intialise the database and other static configuration.
 
 """
 
+
 import unittest
 import os
 from pywebhdfs.webhdfs import PyWebHdfsClient
-
-import schema
+from nose.tools import with_setup
+from config import prod
+from lib import schema
+from lib import common
 
 
 def test_hdfs_paths ():
@@ -20,7 +23,7 @@ def test_hdfs_paths ():
     hdfs.make_dir("inbound/reuters/tick")
     hdfs.make_dir("inbound/reuters/ohlcv")
     hdfs.make_dir("inbound/reuters/depth")
-
+    hdfs.make_dir("data/h5")
 
 def test_reuters_map ():
     """ Reuters code mapping """

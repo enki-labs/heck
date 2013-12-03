@@ -4,6 +4,7 @@ Main daemon process.
 """
 
 import json
+from config import prod
 from lib import common
 from lib import schema
 

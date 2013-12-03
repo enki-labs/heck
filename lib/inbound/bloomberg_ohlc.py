@@ -7,6 +7,7 @@ from autologging import logged, traced, TracedMethods
 import pytz
 from lib.data import ohlc
 from lib import common
+from lib.inbound import bloomberg_series
 
 
 class Import (object, metaclass= TracedMethods(common.log, "parse", "parse_value")):
@@ -58,11 +59,11 @@ class Import (object, metaclass= TracedMethods(common.log, "parse", "parse_value
                 if ticker == "":
                     common.log.debug("first ticker")
                     ticker = vals[0]
-                    store = ohlc.get_store(ticker)
+                    store = ohlc.get_store(bloomberg_series.parse_symbol(ticker))
                 elif ticker != vals[0]:
                     ticker = vals[0]
                     store.close()
-                    store = ohlc.get_store(ticker)
+                    store = ohlc.get_store(bloomberg_series.parse_symbol(ticker))
 
                 if len(vals[3].strip()) == 0: 
                     tickTime = datetime.datetime.strptime(vals[3], "%Y/%m/%d")

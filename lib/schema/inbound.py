@@ -16,7 +16,7 @@ def table (base):
 
         def __repr__ (self):
             return "<file(path='%s', status='%s', meta='%s')>" % (
-                   path, status, meta)
+                   self.path, self.status, self.meta)
 
     return table_def
 

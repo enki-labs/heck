@@ -1,7 +1,9 @@
 
 from nose.tools import eq_, ok_
+from config import test
 from lib.inbound import bloomberg_series
 from io import StringIO
+from lib import schema
 
 def test_parse_future_contract_2000 ():
     symbol = "SIM07"
@@ -73,6 +75,14 @@ test
 test
 """
     bloomberg_series.Import.parse(StringIO(testdata))
+    with schema.select("series") as a:
+        print("(((((((((((((((((((((((((((((")
+        print(a.first())
+        for a1 in a:
+            print(type(a1))
+            print(dir(a1))
+            print(a1)
+     
     ok_(schema.select_one("series", symbol="ABC") != None)
     ok_(schema.select_one("series", symbol="DEFG") != None)
 

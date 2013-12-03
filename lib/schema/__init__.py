@@ -14,8 +14,7 @@ from sqlalchemy import sql
 """ Initial loading """
 
 common.log.debug("load database engine")
-#postgresql://me@localhost/mydb
-engine = create_engine("sqlite:///:memory:", pool_size=20)
+engine = create_engine(common.db_connection, pool_size=20)
 session_factory = sessionmaker(bind=engine)
 base = declarative_base()
 base.metadata.bind = engine
@@ -34,10 +33,34 @@ for _,_,files in os.walk(__path__[0]):
 common.log.debug("init schema")
 base.metadata.create_all(checkfirst=True)
 
+
+class SessionWrapper (object):
+    """ Wapper to enable use of sessions in the 'with' context """
+
+    def __init__ (self, session, action):
+        self._session = session
+        self._action = action
+    
+    def __enter__ (self):
+        return self._action
+
+    def __exit__ (self, typ, value, tb):
+        if tb is None:
+            self._session.commit()
+        else:
+            self._session.rollback()
+        self._session.close()
+
+
 def table (name):
     """ Return a table schema """
     return tables[name]()
 
+def select (table, **kwargs):
+    """ Select one or more elements from a table """
+    session = session_factory()
+    return SessionWrapper(session, session.query(tables[table]).filter_by(**kwargs))
+    
 def select_one (table, **kwargs):
     """ Select one element from a table """
     session = session_factory()

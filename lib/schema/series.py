@@ -15,7 +15,7 @@ def table (base):
 
         def __repr__ (self):
             return "<series(symbol='%s', meta='%s')>" % (
-                   symbol, meta)
+                   self.symbol, self.meta)
 
     return table_def
 

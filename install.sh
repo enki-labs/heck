@@ -73,4 +73,8 @@ easy_install3 pywebhdfs
 
 easy_install3 SQLAlchemy
 
-
+apt-get install -y postgresql postgresql-contrib
+apt-get install -y libpq-dev
+easy_install3 psycopg2
+sudo -u postgres createuser heck -s -P
+sudo -u postgres createdb heck
