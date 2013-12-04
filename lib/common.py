@@ -6,6 +6,8 @@ Common config, logging etc.
 
 import os
 import sys
+import tempfile
+import subprocess
 import logging
 import autologging
 import base64
@@ -29,6 +31,60 @@ __stdout_handler.setFormatter(__formatter)
 log.addHandler(__stdout_handler)
 
 
+class StoreFile (object):
+    """
+    Local wrapper for a store file.
+    """
+
+    def __init__ (self, client, path, mode):
+        """ Open file in mode 'r' read or 'w' write """
+        self._client = client
+        self._path = path
+        if mode not in ['r', 'w']: raise Exception("Unsupported mode %s" % mode)
+        self._mode = mode
+        self._temp = None
+
+    def __enter__ (self):
+        """ Creates temporary file and inits with store content if read mode """
+        self._temp = tempfile.NamedTemporaryFile()
+        if self._mode == 'r':
+           # -copyToLocal doesn't support overwrite so let's swap the temp file
+           copytolocal_overwrite_hack = self._temp.name + ".read"
+           try:
+               proc = subprocess.Popen(['hdfs', 'dfs', '-copyToLocal', self._path, copytolocal_overwrite_hack], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+               out = proc.communicate()
+               if proc.returncode != 0:
+                   raise Exception("Read file from store failed (%s)" % (out[1]))
+           except OSError as ex:
+               raise Exception("Read file from store failed (%s)" % (ex.strerror))
+           self._temp.close()
+           newfile = open(copytolocal_overwrite_hack, "rb")
+           self._temp = tempfile._TemporaryFileWrapper(newfile, newfile.name)
+        return self
+
+    def __exit__ (self, typ, value, tb):
+        """ Close and remove temp file """
+        if self._temp:
+            self._temp.close()
+
+    def local (self):
+        """ Get local temp file instance. Use local().path to access file """
+        return self._temp
+
+    def save (self):
+        """ Write file to store """
+        if self._mode == 'r':
+            raise Exception("File in read mode - cannot write")
+        self._temp.flush()
+        try:
+            proc = subprocess.Popen(['hdfs', 'dfs', '-copyFromLocal', '-f', self._temp.name, self._path], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            out = proc.communicate()
+            if proc.returncode != 0:
+                raise Exception("Store file failed (%s)" % (out[1]))
+        except OSError as ex:
+            raise Exception("Store file failed (%s)" % (ex.strerror))
+    
+
 class Store (object):
     """
     File store.
@@ -37,6 +93,18 @@ class Store (object):
     def __init__ (self):
         """ Connect to store """
         self._client = PyWebHdfsClient(host=store_host, port=store_port, user_name=store_user)
+
+    def mkdir (self, path):
+        """ Make a directory including parent directories """
+        self._client.make_dir(path)
+
+    def read (self, path):
+        """ Get a reader for a store file. Use in with statement """
+        return StoreFile(self._client, "/" + path, 'r')
+
+    def write (self, path):
+        """ Get a writer for a store file. Use in with statement """
+        return StoreFile(self._client, "/" + path, 'w')
 
     def walk (self, path, visitor, recursive = False):
         """ Walk files in a path. Use recursive=True to include subdirs """

@@ -15,3 +15,18 @@ def test_path_encode_decode ():
     eq_(testinfo["symbol"], outinfo["symbol"])
     eq_(testinfo["year"], outinfo["year"])
 
+def test_store ():
+
+    common.store.mkdir("test/test2")
+
+    with common.store.write("test/testfile.txt") as testfile:
+        content = testfile.local().file
+        content.write(b"line 1\n")
+        content.write(b"line 2\n")
+        testfile.save()
+    with common.store.read("test/testfile.txt") as testfile:
+        content = testfile.local().file
+        eq_(content.readline(), b"line 1\n")
+        eq_(content.readline(), b"line 2\n")
+        eq_(content.readline(), b"")
+

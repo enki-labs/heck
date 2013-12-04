@@ -78,3 +78,8 @@ apt-get install -y libpq-dev
 easy_install3 psycopg2
 sudo -u postgres createuser heck -s -P
 sudo -u postgres createdb heck
+
+# patch
+# vim /usr/local/lib/python3.2/dist-packages/pywebhdfs-0.2.1-py3.2.egg/pywebhdfs/webhdfs.py
+# line 178 -  "return response.content" not "return response.text"
+
