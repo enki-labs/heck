@@ -30,7 +30,7 @@ def get_bloomberg (symbol):
         return None
 
 
-class Series (object, metaclass = TracedMethods(common.log, "__init__")):
+class Symbol (object, metaclass = TracedMethods(common.log, "__init__")):
     """ Define an instrument and its metadata """
 
     def __init__ (self, symbol, load=True):
@@ -42,11 +42,11 @@ class Series (object, metaclass = TracedMethods(common.log, "__init__")):
 
     def _load (self):
         """ Load the symbol from the database """
-        data = schema.select_one("series", symbol=self._symbol)
+        data = schema.select_one("symbol", symbol=self._symbol)
         if data:
             self._metadata = json.loads(data.meta)
         else:
-            raise Exception("No series %s" % self._symbol)
+            raise Exception("No symbol %s" % self._symbol)
 
     def set (self, name, value):
         """ Series meta data """
@@ -54,7 +54,7 @@ class Series (object, metaclass = TracedMethods(common.log, "__init__")):
 
     def save (self):
         """ Persist to the database """
-        inst = schema.table("series")
+        inst = schema.table("symbol")
         inst.symbol = self._symbol
         inst.meta = json.dumps(self._metadata)
         schema.save(inst)

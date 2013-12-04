@@ -6,7 +6,7 @@ Import a Bloomberg data file.
 from autologging import logged, traced, TracedMethods
 import pytz
 import re
-from lib.data import series
+from lib.data import symbol
 from lib import common
 
 
@@ -60,7 +60,7 @@ def parse_symbol (symbol):
     definition = dict(provider="bloomberg")
     parts = symbol.split(" ")
 
-    if parts[0][-1] == " ":
+    if len(parts[0]) == 1 or len(parts) == 4:
         tempsymbol = parts[0] + parts[1]
         parts = parts[1:]
         parts[0] = tempsymbol
@@ -169,7 +169,7 @@ class Import (object, metaclass= TracedMethods(common.log, "parse")):
 
         for line in reader.readlines():
             line_count = line_count + 1
-            common.log.debug(line_count)
+            if line_count % 500 == 0: common.log.debug("line %s" % line_count)
             if not isinstance(line, str): 
                 line = line.decode("utf-8").strip()
             else:
@@ -182,12 +182,12 @@ class Import (object, metaclass= TracedMethods(common.log, "parse")):
                 break
             elif reading:
                 vals = line.split("|")
-                inst = series.get_bloomberg(vals[0])
+                inst = symbol.get_bloomberg(vals[0])
                 if inst == None:
                     common.log.debug("parsing %s" % vals[0])
                     if vals[23] in handlers:
                         detail = parse_symbol(vals[0])
-                        inst = series.Series(detail["symbol"], False)
+                        inst = symbol.Symbol(detail["symbol"], False)
                         inst.set("name", vals[4])
                         inst.set("currency", vals[8])
                         inst.set("exchange", vals[14])
