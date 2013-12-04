@@ -15,7 +15,7 @@ def get_store (series_info):
     Open a store.
     """
     filters = Filters(complevel = 9, complib = "blosc", fletcher32 = False)
-    return Ohlc(common.Path.get("store", series_info), filters)
+    return Ohlc(common.Path.get("series_store", series_info), filters)
 
 
 class Ohlc (object, metaclass = TracedMethods(common.log, "__init__", "add", "close")):

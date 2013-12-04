@@ -57,7 +57,7 @@ def parse_symbol (symbol):
     """
     Parse symbol to determine attributes.
     """
-    definition = dict()
+    definition = dict(provider="bloomberg")
     parts = symbol.split(" ")
 
     if parts[0][-1] == " ":

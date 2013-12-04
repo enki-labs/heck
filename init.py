@@ -23,7 +23,7 @@ def test_hdfs_paths ():
     hdfs.make_dir("inbound/reuters/tick")
     hdfs.make_dir("inbound/reuters/ohlcv")
     hdfs.make_dir("inbound/reuters/depth")
-    hdfs.make_dir("data/h5")
+    hdfs.make_dir("data/store")
 
 def test_reuters_map ():
     """ Reuters code mapping """

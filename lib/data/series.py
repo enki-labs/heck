@@ -6,7 +6,7 @@ Instrument class accessing metadata, mappings etc.
 from autologging import logged, traced, TracedMethods
 import json
 from lib import common
-import schema
+from lib import schema
 from sqlalchemy.sql import and_
 
 
