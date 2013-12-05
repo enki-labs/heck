@@ -49,7 +49,7 @@ def parse_future_contract (symbol):
         else:
             year = 1900 + year
 
-        return dict(symbol=symbol, year=year, month=month)
+        return dict(symbol=symbol, year=str(year), month=str(month))
     else:
         return None
 
@@ -70,11 +70,11 @@ def parse_symbol (symbol):
     if partcount in (2,3):
 
         if partcount == 2:
-            definition["class"] = parts[1]
+            definition["class"] = parts[1].lower()
 
         elif len(parts) == 3:
             definition["source"] = parts[1]
-            definition["class"] = parts[2]
+            definition["class"] = parts[2].lower()
 
         contract = parse_future_contract(parts[0])
         if contract:            

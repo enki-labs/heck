@@ -23,9 +23,9 @@ db_connection = os.environ["HECK_DB"]
 
 
 log = logging.getLogger("heck")
-log.setLevel(autologging.TRACE)
+log.setLevel(logging.DEBUG)#autologging.TRACE)
 __stdout_handler = logging.StreamHandler(sys.stdout)
-__stdout_handler.setLevel(autologging.TRACE)
+__stdout_handler.setLevel(logging.DEBUG)#TRACE)
 __formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 __stdout_handler.setFormatter(__formatter)
 log.addHandler(__stdout_handler)

@@ -4,10 +4,11 @@ Import a Bloomberg data file.
 """
 
 from autologging import logged, traced, TracedMethods
+import datetime
 import pytz
-from lib.data import ohlc
+from lib import data
 from lib import common
-from lib.inbound import bloomberg_series
+from lib.inbound import bloomberg_symbol
 
 
 class Import (object, metaclass= TracedMethods(common.log, "parse", "parse_value")):
@@ -45,7 +46,7 @@ class Import (object, metaclass= TracedMethods(common.log, "parse", "parse_value
 
         for line in reader.readlines():
             line_count = line_count + 1
-            common.log.debug(line_count)
+            if line_count % 500 == 0: common.log.debug("line %s" % line_count)
             line = line.decode("utf-8").strip()
             if not reading and line == "START-OF-DATA":
                 common.log.debug("start reading")
@@ -55,20 +56,26 @@ class Import (object, metaclass= TracedMethods(common.log, "parse", "parse_value
                 break
             elif reading:
                 vals = line.split("|")
+                has_date = len(vals[3].strip()) != 0
 
-                if ticker == "":
-                    common.log.debug("first ticker")
-                    ticker = vals[0]
-                    store = ohlc.get_store(bloomberg_series.parse_symbol(ticker))
-                elif ticker != vals[0]:
-                    ticker = vals[0]
-                    store.close()
-                    store = ohlc.get_store(bloomberg_series.parse_symbol(ticker))
+                if has_date:
+                    if ticker == "":
+                        common.log.debug("first ticker")
+                        ticker = vals[0]
+                        tags = dict(format="ohlc")
+                        tags.update(bloomberg_symbol.parse_symbol(ticker))
+                        store = data.get_series(tags, create=True)
+                    elif ticker != vals[0]:
+                        ticker = vals[0]
+                        store.close()
+                        tags = dict(format="ohlc")
+                        tags.update(bloomberg_symbol.parse_symbol(ticker))
+                        store = data.get_series(tags, create=True)
 
-                if len(vals[3].strip()) == 0: 
-                    tickTime = datetime.datetime.strptime(vals[3], "%Y/%m/%d")
-                    tickTime = tickTime.replace(tzinfo=pytz.utc)
-                    store.add(tickTime, Import.parse_value(vals[4])
+                    if len(vals[3].strip()) != 0: 
+                        tickTime = datetime.datetime.strptime(vals[3], "%Y/%m/%d")
+                        tickTime = tickTime.replace(tzinfo=pytz.utc)
+                        store.add(tickTime, Import.parse_value(vals[4])
                                   , Import.parse_value(vals[5])
                                   , Import.parse_value(vals[6])
                                   , Import.parse_value(vals[7])

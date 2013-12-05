@@ -36,17 +36,12 @@ common.store.walk("inbound", add_file, recursive=True)
 
 with schema.select("inbound", status="dirty") as select:
     for inbound in select.all():
-        print(inbound.path)
-        #with common.Store.read(inbound.path) as reader:
-        #    bloomberg_ohlc.Import.parse(reader)
-        a = common.store.read(inbound.path)
-        print(a)
-        #b = a.encode()
-        #print(b)
-        b = a
-        print(len(b))
-        #print(inbound.size)
-        bloomberg_ohlc.Import.parse(io.BytesIO(gzip.decompress(b)))
+        meta = json.loads(inbound.meta)
+        if meta["size"] > 10 * 1024 * 1024:
+            common.log.debug("process %s" % inbound.path)
+            with common.store.read(inbound.path) as infile:
+                bloomberg_ohlc.Import.parse(gzip.GzipFile(fileobj=infile.local()))
+            raise "OK!!!"
         
 
 

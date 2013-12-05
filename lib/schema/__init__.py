@@ -77,6 +77,7 @@ def save (obj):
     try:
         session.add(obj)
         session.commit()
+        session.refresh(obj)
     except:
         session.rollback()
         raise
