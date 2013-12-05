@@ -61,7 +61,7 @@ def parse_symbol (symbol):
     parts = symbol.split(" ")
 
     if len(parts[0]) == 1 or len(parts) == 4:
-        tempsymbol = parts[0] + parts[1]
+        tempsymbol = parts[0] + " " + parts[1]
         parts = parts[1:]
         parts[0] = tempsymbol
 
