@@ -91,3 +91,7 @@ sudo -u postgres createdb heck
 # vim /usr/local/lib/python3.2/dist-packages/pywebhdfs-0.2.1-py3.2.egg/pywebhdfs/webhdfs.py
 # line 178 -  "return response.content" not "return response.text"
 
+# patch
+# vim /usr/local/lib/python3.2/dist-packages/tables-3.0.0-py3.2-linux-x86_64.egg/tables/attributeset.py 
+# line 379 and 342 - "elif name == 'FILTERS':" not "elif name == 'FILTERS' and format_version >= (2, 0):"
+

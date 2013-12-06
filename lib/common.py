@@ -11,6 +11,8 @@ import subprocess
 import logging
 import autologging
 import base64
+from datetime import datetime
+import time
 from autologging import logged, traced, TracedMethods
 from pywebhdfs.webhdfs import PyWebHdfsClient
 
@@ -23,12 +25,47 @@ db_connection = os.environ["HECK_DB"]
 
 
 log = logging.getLogger("heck")
-log.setLevel(logging.DEBUG)#autologging.TRACE)
+log_level = logging.DEBUG #autologging.TRACE
+log.setLevel(log_level)
 __stdout_handler = logging.StreamHandler(sys.stdout)
-__stdout_handler.setLevel(logging.DEBUG)#TRACE)
+__stdout_handler.setLevel(log_level)
 __formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 __stdout_handler.setFormatter(__formatter)
 log.addHandler(__stdout_handler)
+
+
+class Time (object):
+    """
+    Wrap time.
+    """
+
+    micro_per_second = 1000000
+    """ Tick times are in microseconds since 1970-01-01 """
+
+    @staticmethod
+    def tick (python_time=None):
+        """
+        Convert a Python time to a tick time.
+        If no args or pyton_time is None then return current tick time.
+        """
+        if python_time:
+            return ((time.mktime(python_time.timetuple())*Time.micro_per_second) + 
+                    int(python_time.microsecond))
+        else:
+            return Time.tick(Time.time())
+
+    @staticmethod
+    def time (tick=None):
+        """
+        Convert a tick time to a Python time.
+        If no args or tick is None then return current Python time.
+        """
+        if tick:
+            seconds = int(tick/Time.micro_per_second)
+            microseconds = int(tick%Time.micro_per_second)
+            return datetime.fromtimestamp(seconds).replace(microsecond=microseconds)
+        else:
+            return datetime.utcnow() #TODO: add timezone?
 
 
 class StoreFile (object):

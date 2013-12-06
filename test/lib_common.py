@@ -30,3 +30,9 @@ def test_store ():
         eq_(content.readline(), b"line 2\n")
         eq_(content.readline(), b"")
 
+def test_time ():
+
+    import datetime
+    test = datetime.datetime(year=2003, month=5, day=17, hour=14, minute=12, second=4, microsecond=923452)
+    test_tick = common.Time.tick(test)
+    eq_(common.Time.time(test_tick), test)

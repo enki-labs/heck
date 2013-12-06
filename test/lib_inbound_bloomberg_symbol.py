@@ -68,8 +68,8 @@ test
 test
 test
 START-OF-DATA
-ABCM10 Index||||ABC DESC|CODE|||CUR|Desc|||||EXCH|||CODE2||||||Future||
-DEFG Index||||DEFG DESC|CODE|||CUR|Desc|||||EXCH|||CODE2||||||Index||
+ABCM10 Index|0|||ABC DESC|CODE|||CUR|Desc|||||EXCH|||CODE2||||||Future||
+DEFG Index|0|||DEFG DESC|CODE|||CUR|Desc|||||EXCH|||CODE2||||||Index||
 END-OF-DATA
 test
 test

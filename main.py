@@ -9,6 +9,7 @@ import io
 from config import prod
 from lib import common
 from lib import schema
+from lib import data
 from lib.inbound import bloomberg_ohlc
 from lib.inbound import bloomberg_symbol
 
@@ -46,6 +47,7 @@ with schema.select("inbound", inbound_table.path.like("inbound/bloomberg/symbol/
             bloomberg_symbol.Import.parse(infile.local())
 """
 
+"""
 common.log.info("Processing Bloomberg OHLCV")
 with schema.select("inbound", inbound_table.path.like("inbound/bloomberg/ohlcv/%"), inbound_table.status=="dirty") as select:
     for inbound in select.all():
@@ -55,6 +57,13 @@ with schema.select("inbound", inbound_table.path.like("inbound/bloomberg/ohlcv/%
             with common.store.read(inbound.path) as infile:
                 bloomberg_ohlc.Import.parse(gzip.GzipFile(fileobj=infile.local()))
             raise "OK!!!"
-        
+"""
+
+series = schema.select_one("series", schema.table.series.id==9576)
+print(series)
+reader = data.get_reader(series)
+for row in reader.read_iter():
+    print(row["time"], row["open"])
+    
 
 

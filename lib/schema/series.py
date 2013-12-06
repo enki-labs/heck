@@ -19,6 +19,7 @@ def table (base):
         start = Column(types.BigInteger, default=-1)
         end = Column(types.BigInteger, default=-1)
         count = Column(types.BigInteger, default=0)
+        last_modified = Column(types.BigInteger, default=-1)
 
         @validates('tags')
         def _set_tags (self, key, value):
