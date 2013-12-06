@@ -17,6 +17,7 @@ easy_install3 pylint
 easy_install3 pytz
 easy_install3 numpy
 easy_install3 "numexpr>=2.0"
+easy_install3 pandas
 
 mkdir -p tmp
 pushd tmp
