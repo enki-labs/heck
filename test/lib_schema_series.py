@@ -10,11 +10,11 @@ def test_insert ():
     unsorted = [456, 123, 980]
     sortd = [123, 456, 980]
 
-    insert = schema.table("series")
+    insert = schema.table.series()
     insert.tags = unsorted
     schema.save(insert)
 
-    inserted = schema.select_one("series", tags=sortd)
+    inserted = schema.select_one("series", schema.table.series.tags==sortd)
     ok_(inserted != None)
     eq_(inserted.tags, sortd)
 

@@ -6,19 +6,11 @@ Data class - open, high, low, close, volume and open interest.
 from autologging import logged, traced, TracedMethods
 import time
 from lib import common
+from lib import schema
 from tables import *
 
 
-#@traced(common.log)
-#def get_store (series_info):
-#    """
-#    Open a store.
-#    """
-#    filters = Filters(complevel = 9, complib = "blosc", fletcher32 = False)
-#    return Ohlc(common.Path.get("series_store", series_info), filters)
-
-
-class Ohlc (object, metaclass = TracedMethods(common.log, "__init__", "add", "close")):
+class Ohlc (object): #, metaclass = TracedMethods(common.log, "__init__", "add", "close")):
 
     class Ohlc_table (IsDescription):
         time            = Int64Col()
@@ -30,9 +22,9 @@ class Ohlc (object, metaclass = TracedMethods(common.log, "__init__", "add", "cl
         openInterest    = Float64Col()
         actual          = Float64Col()
 
-    def __init__ (self, file_path, filters):
-
-        self._local = common.store.write(file_path).__enter__()
+    def __init__ (self, series, filters):
+        self._series = series
+        self._local = common.store.write(common.Path.resolve_path("series_ohlc", series)).__enter__()
         self._file = openFile(self._local.local().name, mode="w", title="")
 
         if "data" in self._file.root:
@@ -63,8 +55,16 @@ class Ohlc (object, metaclass = TracedMethods(common.log, "__init__", "add", "cl
         Close the file and flush data.
         """
         self._table.flush()
+        # update cache info
+        count = int(self._table.nrows)
+        self._series.count = count
+        self._series.start = -1 if count == 0 else int(self._table[0]['time']) 
+        self._series.end = -1 if count == 0 else int(self._table[-1]['time'])
+        # close and update 
         self._file.close()
         self._local.save()
         self._local.__exit__(None, None, None)
+        # write to db
+        schema.save(self._series)
 
 

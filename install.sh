@@ -31,7 +31,15 @@ popd
 
 easy_install3 tables
 
-
+mkdir -p tmp
+pushd tmp
+git clone https://github.com/Spooner/bunch.git
+pushd bunch
+git checkout -t origin/patch-1
+python3 setup.py install
+popd
+rm -rf bunch
+popd
 
 mkdir -p tmp
 pushd tmp

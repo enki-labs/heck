@@ -7,9 +7,10 @@ from sqlalchemy.engine import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import schema, types
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import sql
+from bunch import Bunch
 import os
 from lib import common
-from sqlalchemy import sql
 
 """ Initial loading """
 
@@ -20,14 +21,14 @@ base = declarative_base()
 base.metadata.bind = engine
 
 common.log.debug("load data schema")
-tables = dict()
+table = Bunch()
 for _,_,files in os.walk(__path__[0]):
     for fname in files:
         parts = os.path.splitext(fname)
         if len(parts) == 2 and parts[1] == ".py" and not parts[0] == "__init__":
             common.log.debug("import %s" % parts[0])
             imported_schema = __import__("lib.schema." + parts[0], globals(), locals(), ["table"], -1)
-            tables[parts[0]] = imported_schema.table(base)
+            table.update({parts[0]: imported_schema.table(base)})
     break
 
 common.log.debug("init schema")
@@ -52,21 +53,17 @@ class SessionWrapper (object):
         self._session.close()
 
 
-def table (name):
-    """ Return a table schema """
-    return tables[name]()
-
-def select (table, **kwargs):
+def select (table_name, *criterion):
     """ Select one or more elements from a table """
     session = session_factory()
-    return SessionWrapper(session, session.query(tables[table]).filter_by(**kwargs))
+    return SessionWrapper(session, session.query(table[table_name]).filter(*criterion))
     
-def select_one (table, **kwargs):
+def select_one (table_name, *criterion):
     """ Select one element from a table """
     session = session_factory()
     res = None
     try:
-        res = session.query(tables[table]).filter_by(**kwargs).first()
+        res = session.query(table[table_name]).filter(*criterion).first()
     finally:
         session.close()
     return res

@@ -62,14 +62,14 @@ class Import (object, metaclass= TracedMethods(common.log, "parse", "parse_value
                     if ticker == "":
                         common.log.debug("first ticker")
                         ticker = vals[0]
-                        tags = dict(format="ohlc")
+                        tags = dict(format="ohlc", period="day")
                         tags.update(bloomberg_symbol.parse_symbol(ticker))
                         common.log.info("%s" % (tags))
                         store = data.get_series(tags, create=True)
                     elif ticker != vals[0]:
                         ticker = vals[0]
                         store.close()
-                        tags = dict(format="ohlc")
+                        tags = dict(format="ohlc", period="day")
                         tags.update(bloomberg_symbol.parse_symbol(ticker))
                         common.log.info("%s" % (tags))
                         store = data.get_series(tags, create=True)

@@ -8,12 +8,18 @@ import pytz
 import re
 from lib.data import symbol
 from lib import common
+from lib import schema
 
 
 """
 Search for a valid contract.
 """
 contract_search = re.compile("^.*[F,G,H,J,K,M,N,Q,U,V,X,Z]\d{1,2}$")
+
+"""
+Search for a contract name (eg Mar08).
+"""
+contract_name_search = re.compile("^.*\w[Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec][0-9][0-9]$")
 
 """
 Search for a year code.
@@ -182,21 +188,20 @@ class Import (object, metaclass= TracedMethods(common.log, "parse")):
                 break
             elif reading:
                 vals = line.split("|")
-                inst = symbol.get_bloomberg(vals[0])
-                if inst == None:
-                    common.log.debug("parsing %s" % vals[0])
-                    if vals[23] in handlers:
-                        detail = parse_symbol(vals[0])
-                        inst = symbol.Symbol(detail["symbol"], False)
-                        inst.set("name", vals[4])
-                        inst.set("currency", vals[8])
-                        inst.set("exchange", vals[14])
-                        inst.set("class", detail["class"])
-                        inst.set("type", vals[23])
-                        inst.save()
-                        #handlers[vals[23]](vals)
+                if int(vals[1]) == 0:
+                    tags = parse_symbol(vals[0])
+                    sym = symbol.get(tags["symbol"], create=True)
+                    category = vals[23].lower()
+                    sym.category = category
+                    if category == "future" and contract_name_search.match(vals[4]):
+                        sym.name = " ".join(vals[4][:-5].split()) #collapse whitespace
                     else:
-                        raise Exception("Unknown type %s" % vals[23])
+                        sym.name = " ".join(vals[4].split())
+                    if len(vals[8].strip()) > 0: sym.meta_add("currency", vals[8])
+                    if len(vals[14].strip()) > 0: sym.meta_add("exchange", vals[14])
+                    sym.meta_add("class", tags["class"])
+                    schema.save(sym)
+                    #raise Exception("Unknown type %s" % vals[23])
 
         common.log.debug("parsed %s lines" % line_count)
 

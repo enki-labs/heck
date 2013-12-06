@@ -141,6 +141,13 @@ class Path (object):
         return base64.urlsafe_b64decode(bytes(name, 'utf-8')).decode('utf-8')
 
     @staticmethod
+    def resolve_path (typ, info):
+        if typ == "series_ohlc":
+            return "data/store/ohlc/%s" % (info.id)
+        else:
+            raise Exception("Unknown path type (%s)" % typ)
+
+    @staticmethod
     def get (typ, info):
         """ Get path. """
         name = ""
