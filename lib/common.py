@@ -39,8 +39,8 @@ class Time (object):
     Wrap time.
     """
 
-    micro_per_second = 1000000
-    """ Tick times are in microseconds since 1970-01-01 """
+    nano_per_second = 1000000000
+    """ Tick times are in nanoseconds since 1970-01-01 """
 
     @staticmethod
     def tick (python_time=None):
@@ -49,8 +49,8 @@ class Time (object):
         If no args or pyton_time is None then return current tick time.
         """
         if python_time:
-            return ((time.mktime(python_time.timetuple())*Time.micro_per_second) + 
-                    int(python_time.microsecond))
+            return ((time.mktime(python_time.timetuple())*Time.nano_per_second) + 
+                    int(python_time.microsecond*1000))
         else:
             return Time.tick(Time.time())
 
@@ -61,8 +61,8 @@ class Time (object):
         If no args or tick is None then return current Python time.
         """
         if tick:
-            seconds = int(tick/Time.micro_per_second)
-            microseconds = int(tick%Time.micro_per_second)
+            seconds = int(tick/Time.nano_per_second)
+            microseconds = int((tick%Time.nano_per_second)/1000)
             return datetime.fromtimestamp(seconds).replace(microsecond=microseconds)
         else:
             return datetime.utcnow() #TODO: add timezone?

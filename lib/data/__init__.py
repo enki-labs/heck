@@ -51,7 +51,7 @@ def get_reader (series):
     else:
         raise Exception("Unknown series format %s" % (tags["format"]))
 
-def get_writer (tags, series, first, last, create):
+def get_writer (tags, first, last, create):
     """
     Open a store and create if required.
     """
