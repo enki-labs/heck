@@ -39,10 +39,10 @@ class OhlcWriter (Writer):
     A writable OHLC data store.
     """
     
-    def __init__ (self, series, filters, first, last, overwrite):
+    def __init__ (self, series, filters, first, last, overwrite, append=False):
         self._series = series
         self._local = common.store.append(common.Path.resolve_path("series_ohlc", series)).__enter__()
-        self._file = open_file(self._local.local().name, mode="a", title="")
+        self._file = open_file(self._local.local().name, mode=("a" if append else "w"), title="")
 
         if "data" in self._file.root:
             self._table = self._file.root.data

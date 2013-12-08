@@ -28,7 +28,7 @@ class Process (object):
                     del[name]
             first = resampled.head(1).index[0].value
             last = resampled.tail(1).index[0].value
-            writer = data.get_writer(tags, first, last, create=True)
+            writer = data.get_writer(tags, first, last, create=True, append=True)
             for row in resampled.to_records():
                 writer.add( row[0]
                           , row["open"]

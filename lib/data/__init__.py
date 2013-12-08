@@ -51,7 +51,7 @@ def get_reader (series):
     else:
         raise Exception("Unknown series format %s" % (tags["format"]))
 
-def get_writer (tags, first, last, create):
+def get_writer (tags, first, last, create=True, overwrite=False, append=False):
     """
     Open a store and create if required.
     """
@@ -80,7 +80,7 @@ def get_writer (tags, first, last, create):
 
     if tags["format"] == "ohlc":
         filters = Filters(complevel = 9, complib = "blosc", fletcher32 = False)
-        return ohlc.OhlcWriter(series, filters, first_tick, last_tick, False)
+        return ohlc.OhlcWriter(series, filters, first_tick, last_tick, overwrite=overwrite, append=append)
     else:
         raise Exception("Unknown series format %s" % (tags["format"]))
 
@@ -134,10 +134,13 @@ class Writer (object):
         """
         Check for overlap between existing and new data.
         """
-        first_row = self._table.read_sorted(self._table.cols.time, start=0, stop=0)
-        last_row = self._table.read_sorted(self._table.cols.time, start=-1, stop=-1)
+        rowcount = self._table.nrows
+        if rowcount == 0: return
 
-        if first < last_row["time"] and last < first_row["time"]:
+        first_row = self._table.read_sorted(self._table.cols.time, start=0, stop=1)[0]
+        last_row = self._table.read_sorted(self._table.cols.time, start=rowcount-1)[0]
+        
+        if first < last_row["time"] and last > first_row["time"]:
             #find overlapping region
             for row in self._table.itersorted(self._table.cols.time):
                 if row["time"] > first:
