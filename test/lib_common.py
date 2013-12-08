@@ -24,6 +24,10 @@ def test_store ():
         content.write(b"line 1\n")
         content.write(b"line 2\n")
         testfile.save()
+
+    eq_(False, common.store.exists("test/not_testfile.txt"))
+    eq_(True, common.store.exists("test/testfile.txt"))
+
     with common.store.read("test/testfile.txt") as testfile:
         content = testfile.local().file
         eq_(content.readline(), b"line 1\n")

@@ -41,7 +41,7 @@ class OhlcWriter (Writer):
     
     def __init__ (self, series, filters, first, last, overwrite):
         self._series = series
-        self._local = common.store.write(common.Path.resolve_path("series_ohlc", series)).__enter__()
+        self._local = common.store.append(common.Path.resolve_path("series_ohlc", series)).__enter__()
         self._file = open_file(self._local.local().name, mode="a", title="")
 
         if "data" in self._file.root:
