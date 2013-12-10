@@ -11,7 +11,7 @@ def table (base):
         __tablename__ = 'lock'
         
         name = Column(types.Unicode(10000), primary_key=True)
-        instance = Column(types.Unicode(1000), primary_key=True)
+        instance = Column(types.Unicode(1000))
         acquired = Column(types.BigInteger)
 
         def __repr__ (self):

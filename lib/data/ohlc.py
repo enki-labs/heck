@@ -38,30 +38,8 @@ class OhlcWriter (Writer):
     A writable OHLC data store.
     """
     
-    def __init__ (self, series, filters, first, last, overwrite, append=False):
-        self._series = series
-        self._local = common.store.append(common.Path.resolve_path("series_ohlc", series)).__enter__()
-
-        try:
-            self._file = open_file(self._local.local().name, mode=("a" if append else "w"), title="")
-
-            try:
-                if "data" in self._file.root:
-                    self._table = self._file.root.data
-                    self._check_overlap(first, last, overwrite)
-                else:
-                    common.log.info("creating file")
-                    self._table = self._file.createTable(self._file.root, 'data', OhlcDescription, "data", filters=filters)
-                    self._table.cols.time.create_csindex()
-                    self._table.autoindex = False
-            except Exception:
-                self._file.close()
-                self._local.__exit__(None, None, None)
-                raise
-        except Exception:
-            self._local.__exit__(None, None, None)
-            raise
-            
+    def __init__ (self, series, filters, first, last, overwrite, append=True):
+        super().__init__(series, filters, first, last, overwrite, append, "series_ohlc", OhlcDescription)
 
     def add (self, t, open, high, low, close, volume, open_interest, actual=None, raw=False):
         """
@@ -80,4 +58,11 @@ class OhlcWriter (Writer):
         row['openInterest'] = open_interest
         row['actual'] = actual
         row.append()
+
+    def save (self):
+        """
+        Write new file to store.
+        """
+        if self._store:
+            self._store.save()
 

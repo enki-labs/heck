@@ -12,15 +12,15 @@ class Store (object):
         """ Make a directory including parent directories """
         raise NotImplementedError()
 
-    def read (self, path):
+    def read (self, path, open_handle):
         """ Get a reader for a store file. Use in with statement """
         raise NotImplementedError()
 
-    def append (self, path):
+    def append (self, path, open_handle):
         """ Get an appender for a store file. Use in with statement """
         raise NotImplementedError()
 
-    def write (self, path):
+    def write (self, path, open_handle):
         """ Get a writer for a store file. Use in with statement """
         raise NotImplementedError()
 
@@ -48,6 +48,10 @@ class StoreFile (object):
 
     def local (self):
         """ Get a local file instance """
+        raise NotImplementedError()
+
+    def local_path (self):
+        """ Return the path of the local file instance """
         raise NotImplementedError()
 
     def save (self):

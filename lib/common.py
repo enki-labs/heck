@@ -72,11 +72,11 @@ class ResourceLock (object):
                     self._lock = new_lock
                     break
                 except IntegrityError:
-                    wait_count = wait_count + 0.1
-                    if wait_count > timeout_secs:
+                    wait_count = wait_count + 0.5
+                    if timeout_secs and wait_count > timeout_secs:
                         raise TimeoutException("lock (%s) timed out" % (self._name))
                     else:
-                        time.sleep(0.1) # wait
+                        time.sleep(0.5) # wait
             elif lock and lock.instance == instanceid:
                 break # already have an active lock
                       # this lock will be a dummy
@@ -87,8 +87,7 @@ class ResourceLock (object):
             schema.delete(self._lock)
 
     def __del__ (self):
-        self.release() #TODO: how to cleanup when no DB?
-        pass
+        self.release()
 
 
 class Time (object):

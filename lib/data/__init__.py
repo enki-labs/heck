@@ -78,7 +78,6 @@ def get_writer (tags, first, last, create=True, overwrite=False, append=False):
         schema.save(series)
 
     if tags["format"] == "ohlc":
-        common.log.info("opening OHLC file for writing")
         filters = Filters(complevel = 9, complib = "blosc", fletcher32 = False)
         return ohlc.OhlcWriter(series, filters, first_tick, last_tick, overwrite=overwrite, append=append)
     else:
@@ -137,22 +136,50 @@ class Writer (object):
     Base class for data store writers.
     """
 
-    def _check_overlap (self, first, last, overwrite):
+    def __init__ (self, series, filters, first, last, overwrite, append, path_name, description):
+        """
+        Constructor.
+        """
+        self._series = series
+        self._filters = filters
+        self._first = first
+        self._last = last
+        self._overwrite = overwrite
+        self._append = append
+        self._store = None
+        self._file = None
+        self._table = None
+        self._path_name = path_name
+        self._description = description
+
+    def _get_row (self, index):
+        """
+        Get the given row by index and time sort.
+        """
+        rowcount = self._table.nrows
+        if rowcount == 0: return None
+
+        if index >= 0:
+            return self._table.read_sorted(self._table.cols.time, start=index, stop=index+1)[0]
+        else:
+            return self._table.read_sorted(self._table.cols.time, start=(rowcount + index), stop=(rowcount + index + 1))[0]
+ 
+    def _check_overlap (self):
         """
         Check for overlap between existing and new data.
         """
         rowcount = self._table.nrows
         if rowcount == 0: return
 
-        first_row = self._table.read_sorted(self._table.cols.time, start=0, stop=1)[0]
-        last_row = self._table.read_sorted(self._table.cols.time, start=rowcount-1)[0]
+        first_row = self._get_row(0)
+        last_row = self._get_row(-1)
         
-        if first < last_row["time"] and last > first_row["time"]:
+        if self._first < last_row["time"] and self._last > first_row["time"]:
             #find overlapping region
             for row in self._table.itersorted(self._table.cols.time):
-                if row["time"] > first:
+                if row["time"] > self._first:
                     if not overwrite:
-                        if last > row["time"]:
+                        if self._last > row["time"]:
                             raise OverlapException()
                         else:
                             break
@@ -160,21 +187,55 @@ class Writer (object):
                         pass #TODO: copy to new table, filter overlap
 
 
-    def close (self):
+    def save (self):
         """
-        Close the file and flush data.
+        Save the file and flush data.
         """
         self._table.flush()
         self._table.flush_rows_to_index()
-        self._table.cols.time.reindex_dirty()
+        self._table.cols.time.reindex()
+        self._table.flush()
         count = int(self._table.nrows)
-        start = -1 if count == 0 else int(self._table[0]['time'])
-        end = -1 if count == 0 else int(self._table[-1]['time'])
-        # close and update 
+        start = -1 if count == 0 else int(self._get_row(0)['time'])
+        end = -1 if count == 0 else int(self._get_row(-1)['time'])
         self._file.flush()
-        self._file.close()
-        self._local.save()
-        self._local.__exit__(None, None, None)
-        # write to db
+        self._store.save()
         update_series(self._series, count, start, end)
+
+    def __enter__ (self):
+        """
+        Init for 'with' block.
+        """
+        if self._append:
+            self._store = common.store.append(
+                          common.Path.resolve_path(self._path_name, self._series)
+                          , open_handle=False).__enter__()
+        else:
+            self._store = common.store.write(
+                          common.Path.resolve_path(self._path_name, self._series)
+                          , open_handle=False).__enter__()
+        
+        try:
+            self._file = open_file(self._store.local_path(), mode=("a" if self._append else "w"), title="")
+            if "data" in self._file.root:
+                self._table = self._file.root.data
+                self._check_overlap()
+            else:
+                self._table = self._file.createTable(self._file.root, 'data', self._description, "data", filters=self._filters)
+                self._table.cols.time.create_csindex()
+                self._table.autoindex = False
+        except Exception:
+            self.__exit__(None, None, None) 
+            raise
+        
+        return self
+
+    def __exit__ (self, typ, value, tb):
+        """
+        Handle 'with' exit.
+        """
+        if self._file:
+            self._file.close()
+        if self._store:
+            self._store.__exit__(None, None, None)
 

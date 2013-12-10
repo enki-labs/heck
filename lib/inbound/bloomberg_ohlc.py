@@ -58,10 +58,10 @@ class Import (object):
                             tags.update(bloomberg_symbol.parse_symbol(ticker))
                             common.log.info("%s" % (tags))
                             try:
-                                store = data.get_writer(tags, first=cache[0][0], last=cache[-1][0], create=True, append=True)
-                                for row in cache:
-                                    store.add(*row)
-                                store.close()
+                                with data.get_writer(tags, first=cache[0][0], last=cache[-1][0], create=True, append=True) as writer:
+                                    for row in cache:
+                                        writer.add(*row)
+                                    writer.save()
                             except data.OverlapException:
                                 common.log.info("ignore overlapping data")
                             cache = []

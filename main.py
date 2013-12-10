@@ -64,7 +64,7 @@ with schema.select("inbound", inbound_table.path.like("inbound/bloomberg/ohlcv/%
         schema.refresh(inbound)
         if inbound.status == processing: #locked ok
             common.log.debug("process %s" % inbound.path)
-            with common.store.read(inbound.path) as infile:
+            with common.store.read(inbound.path, open_handle=True) as infile:
                 bloomberg_ohlc.Import.parse(gzip.GzipFile(fileobj=infile.local()))
                 inbound.status = "imported"
                 schema.save(inbound)

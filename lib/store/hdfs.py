@@ -24,14 +24,14 @@ class Store (store.Store):
     def mkdir (self, path):
         self._client.make_dir(path)
 
-    def read (self, path):
-        return StoreFile(self._client, path, "r")
+    def read (self, path, open_handle):
+        return StoreFile(self._client, path, "r", open_handle)
 
-    def append (self, path):
-        return StoreFile(self._client, path, "a")
+    def append (self, path, open_handle):
+        return StoreFile(self._client, path, "a", open_handle)
 
-    def write (self, path):
-        return StoreFile(self._client, path, "w")
+    def write (self, path, open_handle):
+        return StoreFile(self._client, path, "w", open_handle)
 
     def exists (self, path):
         try:
@@ -61,17 +61,18 @@ class StoreFile (store.Store):
     Local handler for HDFS file.
     """
 
-    def __init__ (self, client, path, mode):
+    def __init__ (self, client, path, mode, open_handle):
         """ Open file in mode 'r' read, 'w' write, or 'a' append """
         self._client = client
         self._path = path
         if mode not in ['r', 'w', 'a']: raise Exception("Unsupported mode %s" % mode)
         self._mode = mode
         self._temp = None
+        self._open_handle = open_handle
 
     def __enter__ (self):
         """ Creates temporary file and inits with store content if read mode """
-        self._temp = tempfile.NamedTemporaryFile()
+        self._temp = tempfile.NamedTemporaryFile(delete=False)
         if self._mode == 'r' or (self._mode == 'a' and store.exists(self._path)):
            # -copyToLocal doesn't support overwrite so let's swap the temp file
            copytolocal_overwrite_hack = self._temp.name + ".read"
@@ -82,20 +83,27 @@ class StoreFile (store.Store):
                    raise Exception("Read file from store failed (%s)" % (out[1]))
            except OSError as ex:
                raise Exception("Read file from store failed (%s)" % (ex.strerror))
-           self._temp.close()
            filemode = "rb" if self._mode == 'r' else "ab"
            newfile = open(copytolocal_overwrite_hack, filemode)
-           self._temp = tempfile._TemporaryFileWrapper(newfile, newfile.name)
+           self._temp.close()
+           os.unlink(self._temp.file.name)
+           self._temp = tempfile._TemporaryFileWrapper(newfile, newfile.name, delete=False)
+        if not self._open_handle:
+           self._temp.close()
         return self
 
     def __exit__ (self, typ, value, tb):
         """ Close and remove temp file """
         if self._temp:
             self._temp.close()
+            os.unlink(self._temp.file.name)
 
     def local (self):
         """ Get local temp file instance """
         return self._temp.file
+
+    def local_path (self):
+        return self._temp.file.name
 
     def save (self):
         """ Write file to store """
