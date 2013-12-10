@@ -3,7 +3,6 @@ Import a Bloomberg data file.
 
 """
 
-from autologging import logged, traced, TracedMethods
 import pytz
 import re
 from lib.data import symbol
@@ -95,16 +94,7 @@ def parse_symbol (symbol):
     return definition
 
 
-class Import (object, metaclass= TracedMethods(common.log, "parse")):
-
-    #@staticmethod
-    #def parse_file (filename):
-    #    """
-    #    Parse a data file.
-    #    """
-    #    with open(filename, 'r') as content:
-    #        Import.parse(content)
-
+class Import (object):
 
     @staticmethod
     def handler_future (vals, inst):
@@ -112,7 +102,6 @@ class Import (object, metaclass= TracedMethods(common.log, "parse")):
         Parse Future details
         """
         return inst
-
 
     @staticmethod
     def handler_index (vals):
@@ -128,14 +117,12 @@ class Import (object, metaclass= TracedMethods(common.log, "parse")):
         """
         pass
 
-
     @staticmethod
     def handler_fx (vals):
         """
         Parse FX details
         """
         pass
-
 
     @staticmethod
     def handler_equity (vals):

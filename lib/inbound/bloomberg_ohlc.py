@@ -3,7 +3,6 @@ Import a Bloomberg data file.
 
 """
 
-from autologging import logged, traced, TracedMethods
 import datetime
 import pytz
 from lib import data
@@ -11,7 +10,7 @@ from lib import common
 from lib.inbound import bloomberg_symbol
 
 
-class Import (object, metaclass= TracedMethods(common.log, "parse", "parse_value")):
+class Import (object):
 
     @staticmethod
     def parse_value (val):
@@ -37,7 +36,7 @@ class Import (object, metaclass= TracedMethods(common.log, "parse", "parse_value
 
         for line in reader.readlines():
             line_count = line_count + 1
-            if line_count % 500 == 0: common.log.debug("line %s" % line_count)
+            if line_count % 1000 == 0: common.log.debug("line %s" % line_count)
             line = line.decode("utf-8").strip()
             if not reading and line == "START-OF-DATA":
                 common.log.debug("start reading")
@@ -55,13 +54,16 @@ class Import (object, metaclass= TracedMethods(common.log, "parse", "parse_value
                         ticker = vals[0]
                     elif ticker != vals[0]:
                         if len(cache) > 0:
-                            tags = dict(format="ohlc", period="day")
+                            tags = dict(format="ohlc", period="1day")
                             tags.update(bloomberg_symbol.parse_symbol(ticker))
                             common.log.info("%s" % (tags))
-                            store = data.get_writer(tags, first=cache[0][0], last=cache[-1][0], create=True)
-                            for row in cache:
-                                store.add(*row)
-                            store.close()
+                            try:
+                                store = data.get_writer(tags, first=cache[0][0], last=cache[-1][0], create=True, append=True)
+                                for row in cache:
+                                    store.add(*row)
+                                store.close()
+                            except data.OverlapException:
+                                common.log.info("ignore overlapping data")
                             cache = []
 
                         ticker = vals[0]
@@ -77,9 +79,6 @@ class Import (object, metaclass= TracedMethods(common.log, "parse", "parse_value
                                      , Import.parse_value(vals[8])
                                      , Import.parse_value(vals[9])
                                      , Import.parse_value(vals[10]) ])
-
-        if store:
-            store.close()
 
         common.log.debug("parsed %s lines" % line_count)
 

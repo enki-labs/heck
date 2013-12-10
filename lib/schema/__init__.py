@@ -68,9 +68,35 @@ def select_one (table_name, *criterion):
         session.close()
     return res
 
+def update (table_name, *where_clause, **update_values):
+    """ Update using a where clause """
+    session = session_factory()
+    try:
+        session.query(table[table_name]).filter(*where_clause).update(update_values)
+        session.commit()
+    except:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+def delete (obj):
+    """ Delete from table """
+    create_session = obj._sa_instance_state.session == None
+    session = session_factory() if create_session else obj._sa_instance_state.session
+    try:
+        session.delete(obj)
+        session.commit()
+    except:
+        session.rollback()
+        raise
+    finally:
+        if create_session: session.close()
+        
 def save (obj):
     """ Upsert table """
-    session = session_factory()
+    create_session = obj._sa_instance_state.session == None
+    session = session_factory() if create_session else obj._sa_instance_state.session
     try:
         session.add(obj)
         session.commit()
@@ -79,5 +105,10 @@ def save (obj):
         session.rollback()
         raise
     finally:
-        session.close()
+        if create_session: session.close()
+
+def refresh (obj):
+    """ Refresh the object """
+    if obj._sa_instance_state.session:
+        obj._sa_instance_state.session.refresh(obj)
     

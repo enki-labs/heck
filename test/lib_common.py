@@ -1,5 +1,5 @@
 
-from nose.tools import eq_, ok_
+from nose.tools import eq_, ok_, assert_raises
 import config.test
 import common
 
@@ -20,7 +20,7 @@ def test_store ():
     common.store.mkdir("test/test2")
 
     with common.store.write("test/testfile.txt") as testfile:
-        content = testfile.local().file
+        content = testfile.local()
         content.write(b"line 1\n")
         content.write(b"line 2\n")
         testfile.save()
@@ -29,7 +29,7 @@ def test_store ():
     eq_(True, common.store.exists("test/testfile.txt"))
 
     with common.store.read("test/testfile.txt") as testfile:
-        content = testfile.local().file
+        content = testfile.local()
         eq_(content.readline(), b"line 1\n")
         eq_(content.readline(), b"line 2\n")
         eq_(content.readline(), b"")
@@ -40,3 +40,18 @@ def test_time ():
     test = datetime.datetime(year=2003, month=5, day=17, hour=14, minute=12, second=4, microsecond=923452)
     test_tick = common.Time.tick(test)
     eq_(common.Time.time(test_tick), test)
+
+def test_lock ():
+
+    lock = common.ResourceLock("something")
+    lock.acquire()
+
+    oldid = common.instanceid
+    common.instanceid = "NOT_THIS"
+    lock2 = common.ResourceLock("something")
+    try:
+        lock2.acquire(timeout_secs=0.5)
+        ok_(False, "TimeoutException expected")
+    except common.TimeoutException:
+        pass
+

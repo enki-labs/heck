@@ -3,7 +3,6 @@ Global methods for data stores.
 
 """
 
-from autologging import logged, traced, TracedMethods
 import time
 from lib import common
 from lib import schema
@@ -79,6 +78,7 @@ def get_writer (tags, first, last, create=True, overwrite=False, append=False):
         schema.save(series)
 
     if tags["format"] == "ohlc":
+        common.log.info("opening OHLC file for writing")
         filters = Filters(complevel = 9, complib = "blosc", fletcher32 = False)
         return ohlc.OhlcWriter(series, filters, first_tick, last_tick, overwrite=overwrite, append=append)
     else:
@@ -108,7 +108,6 @@ class Reader (object):
     def __init__ (self, series, path_type):
         self._series = series
         self._local = common.store.read(common.Path.resolve_path(path_type, series)).__enter__()
-        print(self._local.local().name)
         self._file = openFile(self._local.local().name, mode="r", title="")
         self._table = self._file.root.data
 
@@ -123,6 +122,14 @@ class Reader (object):
         Read data time ordered using an iterator.
         """
         return self._table.itersorted(self._table.cols.time, start=start, stop=stop)
+
+    def close (self):
+        """
+        Close underlying file.
+        """
+        self._table.close()
+        self._file.close()
+        self._local.__exit__(None, None, None)
 
 
 class Writer (object):

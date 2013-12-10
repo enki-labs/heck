@@ -3,12 +3,9 @@ Instrument class accessing metadata, mappings etc.
 
 """
 
-from autologging import logged, traced, TracedMethods
 from lib import common
 from lib import schema
 
-
-@traced(common.log)
 def get_reuters (symbol):
     """ Get an instrument using a Reuters symbol """
     symbol_resolve = schema.table.symbol_resolve
@@ -18,8 +15,6 @@ def get_reuters (symbol):
         raise Exception("Cannot map Reuters instrument %s" % symbol)
     return Series(matches.fetchone()[2])
 
-
-@traced(common.log)
 def get (symbol, create):
     """ Get symbol definition """
     symbol_instance = schema.select_one("symbol", schema.table.symbol.symbol==symbol)
@@ -31,5 +26,4 @@ def get (symbol, create):
         return symbol_instance
     else:
         raise Exception("Unknown symbol (%s)", symbol)
-
 
