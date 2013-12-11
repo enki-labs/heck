@@ -10,6 +10,7 @@ apt-get install -y python3-dev
 apt-get install -y libboost-python-dev
 apt-get install -y libssl-dev
 apt-get install -y python3-nose
+apt-get install -y libyaml-dev
 
 easy_install3 logging
 easy_install3 autologging
@@ -18,6 +19,7 @@ easy_install3 pytz
 easy_install3 numpy
 easy_install3 "numexpr>=2.0"
 easy_install3 pandas
+easy_install3 pyyaml
 
 mkdir -p tmp
 pushd tmp

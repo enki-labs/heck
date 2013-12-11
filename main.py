@@ -13,7 +13,7 @@ from lib import data
 from lib.inbound import bloomberg_ohlc
 from lib.inbound import reuters_tick
 from lib.inbound import bloomberg_symbol
-from sqlalchemy import and_
+from sqlalchemy import and_, not_
 
 def add_file (path, fileinfo):
     """ Check inbound files for new or modified files """
@@ -48,6 +48,7 @@ with schema.select("inbound", inbound_table.path.like("inbound/bloomberg/symbol/
             bloomberg_symbol.Import.parse(infile.local())
 """
 
+"""
 import shutil
 from tempfile import NamedTemporaryFile
 with NamedTemporaryFile(delete=True) as ntf:
@@ -55,7 +56,8 @@ with NamedTemporaryFile(delete=True) as ntf:
         shutil.copyfileobj(gzip.open(infile.local_path()), ntf)
         ntf.seek(0, 0)
         reuters_tick.Import.parse(ntf)
-    
+"""   
+ 
 
 """
 common.log.info("Processing Bloomberg OHLCV")
@@ -101,6 +103,54 @@ with data.get_reader(series) as reader:
     for row in reader.read_iter():
         print(common.Time.time(row["time"]), row["open"]) 
 """
+
+
+config_yaml = """
+filter:
+    - floor,1000
+    - cap,12500
+    - step,3600,40,3
+    - step,900,27.5,5
+    - step,180,27.5,5
+
+remove:
+    - .*\[MKT_ST_IND\].*
+    - .*[B-Zb-z]{1,2}\[ACT_TP_1\].*
+    - .*IRGCOND.*
+              
+allow:
+    - Open\|High\|
+              
+volFollows: false
+copyLast: true
+              
+priceShift: 0
+volumeLimit: 10000
+maxTrade: 1000
+
+validFrom: 
+validTo: 
+
+weekTimezone: Europe/Berlin
+weekEnd: Friday 22:00
+weekStart: Monday 07:50
+"""
+
+from lib.process import filter_tick
+
+search_tags = dict(format="tick", period="tick")
+exclude_tags = dict(status="filtered")
+output_tags = dict(add=dict(status="filtered"), remove=dict())
+
+search_tags_ids = data.resolve_tags(search_tags, create=False)
+exclude_tags_ids = data.resolve_tags(exclude_tags, create=False)
+series = schema.table.series
+with schema.select("series", series.tags.contains(search_tags_ids), not_(series.tags.contains(exclude_tags_ids))) as select:
+    for selected in select.all():
+        print(">>>>>>>>>>>>>>>>>>>>>>>>>>")
+        filter_tick.Process.run(selected, dict(config=config_yaml), output_tags)
+        print("<<<<<<<<<<<<<<<<<<<<<<<<<<")
+
 
 """
 from lib.process import resample

@@ -1,9 +1,38 @@
 
+import io
 import re
 import yaml
 import pytz
 import datetime
+from bunch import Bunch
+import numpy as np
+from lib import common
 from lib import data
+from lib.data import tick
+
+
+class EventFilter (object):
+
+    def __init__ (self, event):
+        self._event = tick.TickEventEnum().lookup(event)
+
+    def filter (self, row, log):
+        if row["event"] == self._event:
+            log.filter("Event", "%s != %s" % (row["event"], self._event), row)
+            return True
+        else: return False
+
+
+class NanFilter (object):
+
+    def __init__ (self, column):
+        self._column = column
+
+    def filter (self, row, log):
+        if np.isnan(row[self._column]):
+            log.filter("NAN", "%s is nan" % (self._column), row)
+            return True
+        else: return False
 
 
 class WeekendFilter (object):
@@ -18,8 +47,7 @@ class WeekendFilter (object):
         self._next_enter_filter = None
         self._next_exit_filter = None
 
-
-    def filter (self, row):
+    def filter (self, row, log):
         time = row["time"]
         filter_tick = False
 
@@ -27,45 +55,52 @@ class WeekendFilter (object):
             self._update_enter_exit(time)
 
         if self._next_enter_filter and self._next_exit_filter:
-
             if time < self._next_enter_filter:
                 filter_tick = False
-            elif time < self._next_exit_filter:
+            elif time > self._next_enter_filter and time < self._next_exit_filter:
                 filter_tick = True
-                self._next_enter_filter = None
-                self._update_enter_exit(time)
             else:
+                self._next_enter_filter = None
                 self._next_exit_filter = None
-                self._update_enter_exit(time)
-        
-        return filter_tick 
+                self._update_enter_exit(common.Time.tick(common.Time.time(time) + datetime.timedelta(1))) #bump
+                filter_tick = False
+
+        if filter_tick:
+            log.filter("Weekend", "", row)
+            return True
+        else: return False 
                
     def _update_enter_exit (self, time):
         localtime = common.Time.time(time).astimezone(self._timezone)
         
         if self._next_enter_filter == None:
             localenter = localtime
-            while localenter.weekday() != self._weekend_day:
-                localenter += datetime.datetime.timedelta(1)
-            localenter += self._weekend_time
-            self._next_enter_filter = common.Time.tick(localenter.astimezone(pytz.utc))
+            while self._next_enter_filter == None:
+                while localenter.weekday() != self._weekend_day:
+                    localenter += datetime.timedelta(1)
+                localenter = localenter.replace(hour=self._weekend_time.hour, minute=self._weekend_time.minute, second=0, microsecond=0)
+                self._next_enter_filter = common.Time.tick(localenter.astimezone(pytz.utc))
 
         if self._next_exit_filter == None:
             localexit = localtime
-            while localexit.weekday() != self._weekstart_day:
-                localexit += datetime.datetime.timedelta(1)
-            localexit += self._weekstart_time
-            self._next_exit_filter = common.Time.tick(localexit.astimezone(pytz.utc))
+            while self._next_exit_filter == None:
+                while localexit.weekday() != self._weekstart_day:
+                    localexit += datetime.timedelta(1)
+                localexit = localexit.replace(hour=self._weekstart_time.hour, minute=self._weekstart_time.minute, second=0, microsecond=0)
+                self._next_exit_filter = common.Time.tick(localexit.astimezone(pytz.utc))
 
 
 class QualifierFilter (object):
 
     def __init__ (self, match):
         self._match = re.compile(match)
+        self._match_string = match
 
-    def filter (self, row):
-        return self._match.match(row["qualifier"])
-
+    def filter (self, row, log):
+        if self._match.match(row["qualifier"].decode("utf-8")):
+            log.filter("Qualifier", "%s" % (self._match_string), row)
+            return True
+        else: return False
 
 class FloorFilter (object):
 
@@ -73,11 +108,11 @@ class FloorFilter (object):
         self._min_value = min_value
         self._column = column
 
-    def filter (self, row):
-        if row[self._column] < self._value:
+    def filter (self, row, log):
+        if row[self._column] < self._min_value:
+            log.filter("Floor", "%s < %s" % (self._column, self._min_value), row)
             return True
-        else:
-            return False
+        else: return False
 
 
 class CapFilter (object):
@@ -86,11 +121,11 @@ class CapFilter (object):
         self._max_value = max_value
         self._column = column
 
-    def filter (self, row):
+    def filter (self, row, log):
         if row[self._column] > self._max_value:
+            log.filter("Cap", "%s > %s" % (self._column, self._max_value), row)
             return True
-        else:
-            return False
+        else: return False
 
 
 class StepFilter (object):
@@ -103,8 +138,9 @@ class StepFilter (object):
         self._max_count = max_count
         self._last_time = None
         self._last_value = None
+        self._filter_desc = "(%s) Column(%s)" % (max_step, column)
 
-    def filter (self, row):
+    def filter (self, row, log):
 
         filtered = False
         value = row[self._column]
@@ -122,14 +158,10 @@ class StepFilter (object):
             self._filter_count = 0
             filtered = False
 
-        if (( self._lastTime and self._lastPrice )
-           and   ( abs(price - self._lastPrice) >= self._maxPriceStep )
-           and   ( (time - self._lastTime) <= self._timeout )
-           and   ( self._filterCount < self._maxFilterCount ) ):
-            self._filterCount += 1
-            filtered = True
-
-        return filtered
+        if filtered:
+            log.filter("Step", self._filter_desc, row)
+        return filtered    
+            
 
 
 class Config (object):
@@ -137,11 +169,13 @@ class Config (object):
     def __init__ (self, config_yaml):
         """ Parse a yaml configuration string """
         configdef = yaml.safe_load(io.StringIO(config_yaml))         
+        if "filters" not in configdef:
+            configdef = dict(filters=[configdef])
+
         self._configs = []
 
         for definition in configdef["filters"]:
-
-            config = dict( valid_from = None
+            config = Bunch( valid_from = None
                          , volume_follows = False
                          , copy_last_price = False
                          , copy_last_volume = False
@@ -168,7 +202,7 @@ class Config (object):
                 for include_filter in definition["allow"]:
                     config.include_filters.append(QualifierFilter(include_filter))
 
-            if "volFollows" in definition: config.volume_follows = definition["volVollows"] 
+            if "volFollows" in definition: config.volume_follows = definition["volFollows"] 
             if "copyLast" in definition:
                 config.copy_last_price = definition["copyLast"] 
                 config.copy_last_volume = definition["copyLast"] 
@@ -176,10 +210,11 @@ class Config (object):
                 config.exclude_filters.append(CapFilter(definition["volumeLimit"], "volume"))
             if "validFrom" in definition:
                 valid_from = definition["validFrom"]
-                valid_from.replace(tzinfo=pytz.utc)
-                config.valid_from = common.Time.tick(valid_from)
+                if valid_from != None:
+                    valid_from.replace(tzinfo=pytz.utc)
+                    config.valid_from = common.Time.tick(valid_from)
             if "weekTimezone" in definition:
-                config.exclude_filters.append(TimeFilter(definition["weekTimezone"], definition["weekEnd"], definition["weekStart"]))
+                config.exclude_filters.append(WeekendFilter(definition["weekTimezone"], definition["weekEnd"], definition["weekStart"]))
 
             self._configs.append(config)
         
@@ -196,11 +231,37 @@ class Config (object):
             return (next_config, None)
     
 
+class FilterLog (object):
+
+    def __init__ (self, show):
+        self._show = show
+        self.summary = dict()
+
+    def filter (self, typ, reason, row):
+        if typ in self.summary:
+            self.summary[typ] += 1
+        else:
+            self.summary[typ] = 1
+
+        if self._show:
+            #print(reason, common.Time.time(row["time"]), row["price"], row["volume"], row["event"], row["qualifier"], row["acc_volume"])
+            pass
+
+
 class Process (object):
 
     @staticmethod
     def parameters ():
-        return dict(filters="string")
+        return dict(config="string")
+
+    @staticmethod
+    def clone_row (row):
+        return dict( time=row["time"]
+                   , event=row["event"]
+                   , price=row["price"]
+                   , volume=row["volume"]
+                   , qualifier=row["qualifier"]
+                   , acc_volume=row["acc_volume"])
 
     @staticmethod
     def run (series, params, output):
@@ -212,50 +273,69 @@ class Process (object):
             if name in tags:
                 del[name]
 
-        # parse configuration(s)
-        config = dict(
-        volume_follows = False
-        copy_last_price = False
-        copy_last_volume = False
-        include_filters = []
-        exclude_filters = [] )
-        configs = 
+        configs = Config(params["config"])
+        include = FilterLog(False)
+        exclude = FilterLog(True)
 
         with data.get_reader(series) as reader:
-            with data.get_writer(tags, first, last, create=True, append=False):
+            with data.get_writer(tags, 0, 0, create=True, append=False) as writer:
 
-                config, next_config = Config.get()
+                config, next_config = configs.get()
+                event_filter = EventFilter("trade")
+                price_filter = NanFilter("price")
+                volume_filter = NanFilter("volume")
                 last_row = None
-                
-                for row in reader.read_iter():
-                    
-                    if last_row == None: last_row = row
+
+                for row in reader._table: #TODO read_iter not working?
+
+                    if not event_filter.filter(row, include): continue
+                    if last_row == None: last_row = Process.clone_row(row)
 
                     if next_config and row["time"] > next_config:
                         config, next_config = Config.get()
 
-                    if config.copy_last_price and row["price"] == None:
+                    row_copy = False 
+                    if config.copy_last_price and np.isnan(row["price"]):
+                        if not row_copy:
+                            row = Process.clone_row(row)
+                            row_copy = True
                         row["price"] = last_row["price"]
-                    if config.copy_last_volume and row["volume"] == None:
+                    if config.copy_last_volume and np.isnan(row["volume"]):
+                        if not row_copy:
+                            row = Process.clone_row(row)
+                            row_copy = True
                         row["volume"] = last_row["volume"]
-                    #todo handle volume on next row
+
+                    if price_filter.filter(row, exclude): continue
+                    if volume_filter.filter(row, exclude): continue
+
+                    #TODO handle volume on next row
+
+                    #print(common.Time.time(row["time"]), row["price"], row["volume"], row["event"], row["qualifier"], row["acc_volume"])
 
                     write_row = False
                     # include on first match
-                    for include in config.include_filters:
-                        if include.filter(row):
+                    for include_filter in config.include_filters:
+                        if include_filter.filter(row, include):
                             write_row = True
                             break
 
                     if not write_row:
                         # exclude on first match
                         write_row = True
-                        for exclude in config.exclude_filters:
-                            if exclude.filter(row):
+                        for exclude_filter in config.exclude_filters:
+                            if exclude_filter.filter(row, exclude):
+                                write_row = False
                                 break
 
                     if write_row:
                         writer.add_row(row)
                     else:
+                        #print("- ", common.Time.time(row["time"]), row["price"], row["volume"], row["event"], row["qualifier"], row["acc_volume"])
                         pass #todo write filtered output
+
+                    last_row = Process.clone_row(row)
+
+                writer.save()
+                print(exclude.summary) 
 

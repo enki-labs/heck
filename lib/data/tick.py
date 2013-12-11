@@ -60,6 +60,20 @@ class TickWriter (Writer):
         super().__init__(series, filters, first, last, overwrite, append, "series_tick", TickDescription)
         self.event_enum = TickEventEnum()
 
+    def add_row (self, row):
+        """
+        Add a raw reader row to the time series.
+        """
+        #TODO more efficient raw append
+        new_row = self._table.row
+        new_row["time"] = row["time"]
+        new_row["event"] = row["event"]
+        new_row["price"] = row["price"]
+        new_row["volume"] = row["volume"]
+        new_row["qualifier"] = row["qualifier"]
+        new_row["acc_volume"] = row["acc_volume"]
+        new_row.append() 
+
     def add (self, t, event, price, volume, qualifier, acc_volume, raw=False):
         """
         Add a value to the time series.

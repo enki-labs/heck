@@ -14,6 +14,7 @@ import autologging
 import base64
 from datetime import datetime
 import time
+import pytz
 from autologging import logged, traced, TracedMethods
 from pywebhdfs.webhdfs import PyWebHdfsClient, errors
 
@@ -124,12 +125,15 @@ class Time (object):
         Convert a tick time to a Python time.
         If no args or tick is None then return current Python time.
         """
+        utc = None
         if tick:
             seconds = int(tick/Time.nano_per_second)
             microseconds = int((tick%Time.nano_per_second)/1000)
-            return datetime.fromtimestamp(seconds).replace(microsecond=microseconds)
+            utc = datetime.fromtimestamp(seconds).replace(microsecond=microseconds)
         else:
-            return datetime.utcnow() #TODO: add timezone?
+            utc = datetime.utcnow()
+            
+        return utc.replace(tzinfo=pytz.utc)
 
 
 class Path (object):
