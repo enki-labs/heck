@@ -44,9 +44,12 @@ def get_reader (series):
     Open a store.
     """
     from lib.data import ohlc
+    from lib.data import tick
     tags = decode_tags(series.tags)
     if tags["format"] == "ohlc":
         return ohlc.OhlcReader(series)
+    elif tags["format"] == "tick":
+        return tick.TickReader(series)
     else:
         raise Exception("Unknown series format %s" % (tags["format"]))
 
@@ -80,6 +83,9 @@ def get_writer (tags, first, last, create=True, overwrite=False, append=False):
     if tags["format"] == "ohlc":
         filters = Filters(complevel = 9, complib = "blosc", fletcher32 = False)
         return ohlc.OhlcWriter(series, filters, first_tick, last_tick, overwrite=overwrite, append=append)
+    elif tags["format"] == "tick":
+        filters = Filters(complevel = 9, complib = "blosc", fletcher32 = False)
+        return tick.TickWriter(series, filters, first_tick, last_tick, overwrite=overwrite, append=append)
     else:
         raise Exception("Unknown series format %s" % (tags["format"]))
 

@@ -11,6 +11,7 @@ from lib import common
 from lib import schema
 from lib import data
 from lib.inbound import bloomberg_ohlc
+from lib.inbound import reuters_tick
 from lib.inbound import bloomberg_symbol
 from sqlalchemy import and_
 
@@ -46,6 +47,15 @@ with schema.select("inbound", inbound_table.path.like("inbound/bloomberg/symbol/
         with common.store.read(inbound.path) as infile:
             bloomberg_symbol.Import.parse(infile.local())
 """
+
+import shutil
+from tempfile import NamedTemporaryFile
+with NamedTemporaryFile(delete=True) as ntf:
+    with common.store.read("inbound/reuters/tick/TimeAndSales_FDXZ9_2000-01-01_2009-12-31.csv.gz", open_handle=True) as infile:
+        shutil.copyfileobj(gzip.open(infile.local_path()), ntf)
+        ntf.seek(0, 0)
+        reuters_tick.Import.parse(ntf)
+    
 
 """
 common.log.info("Processing Bloomberg OHLCV")
@@ -85,11 +95,12 @@ with schema.select("series") as select:
             writer.save()
 """
 
-
+"""
 series = schema.select_one("series", schema.table.series.symbol=="ZA.REER.BBAS")
 with data.get_reader(series) as reader:
     for row in reader.read_iter():
         print(common.Time.time(row["time"]), row["open"]) 
+"""
 
 """
 from lib.process import resample

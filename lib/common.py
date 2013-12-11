@@ -99,6 +99,14 @@ class Time (object):
     """ Tick times are in nanoseconds since 1970-01-01 """
 
     @staticmethod
+    def tick_parts (year, month, day, hour, minute, second, microsecond):
+        """
+        Tick time from date parts.
+        """
+        python_time = datetime(year, month, day, hour, minute, second, microsecond)
+        return Time.tick(python_time)
+
+    @staticmethod
     def tick (python_time=None):
         """
         Convert a Python time to a tick time.
@@ -146,6 +154,8 @@ class Path (object):
     def resolve_path (typ, info):
         if typ == "series_ohlc":
             return "data/store/ohlc/%s" % (info.id)
+        elif typ == "series_tick":
+            return "data/store/tick/%s" % (info.id)
         else:
             raise Exception("Unknown path type (%s)" % typ)
 
