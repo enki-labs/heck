@@ -106,29 +106,45 @@ class Reader (object):
 
     def __init__ (self, series, path_type):
         self._series = series
-        self._local = common.store.read(common.Path.resolve_path(path_type, series)).__enter__()
-        self._file = openFile(self._local.local().name, mode="r", title="")
+        self._path_type = path_type
+        self._store = None
+        self._file = None
+        self._table = None
+
+    def __enter__ (self):
+        """
+        Open file and return reader.
+        """
+        self._store = common.store.read(common.Path.resolve_path(self._path_type, self._series), open_handle=False).__enter__()
+        self._file = openFile(self._store.local_path(), mode="r", title="")
         self._table = self._file.root.data
+        return self
 
     def read (self, start=None, stop=None):
         """
         Read data time ordered.
         """
-        return self._table.read_sorted(self._table.cols.time, start=start, stop=stop)
+        if start == None and stop == None:
+            start = 0
+            stop = self._table.nrows
+        return self._table.read_sorted(self._table.cols.time, start=start, stop=stop, step=1)
 
     def read_iter (self, start=None, stop=None):
         """
         Read data time ordered using an iterator.
         """
-        return self._table.itersorted(self._table.cols.time, start=start, stop=stop)
+        if start == None and stop == None:
+            start = 0
+            stop = self._table.nrows
+        return self._table.itersorted(self._table.cols.time, start=start, stop=stop, step=1)
 
-    def close (self):
+    def __exit__ (self, typ, value, tb):
         """
         Close underlying file.
         """
-        self._table.close()
-        self._file.close()
-        self._local.__exit__(None, None, None)
+        if self._table: self._table.close()
+        if self._file: self._file.close()
+        if self._store: self._store.__exit__(None, None, None)
 
 
 class Writer (object):
@@ -193,7 +209,7 @@ class Writer (object):
         """
         self._table.flush()
         self._table.flush_rows_to_index()
-        self._table.cols.time.reindex()
+        self._table.cols.time.reindex_dirty()
         self._table.flush()
         count = int(self._table.nrows)
         start = -1 if count == 0 else int(self._get_row(0)['time'])

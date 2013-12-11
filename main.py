@@ -47,6 +47,7 @@ with schema.select("inbound", inbound_table.path.like("inbound/bloomberg/symbol/
             bloomberg_symbol.Import.parse(infile.local())
 """
 
+"""
 common.log.info("Processing Bloomberg OHLCV")
 processing = "processing (%s)" % (common.instanceid)
 with schema.select("inbound", inbound_table.path.like("inbound/bloomberg/ohlcv/%"), inbound_table.status=="dirty") as select:
@@ -70,15 +71,25 @@ with schema.select("inbound", inbound_table.path.like("inbound/bloomberg/ohlcv/%
                 schema.save(inbound)
         else:
             common.log.debug("%s locked try next" % inbound.path)
+"""
 
 """
-series = schema.select_one("series", schema.table.series.id==14303)
-print(series)
-reader = data.get_reader(series)
-for row in reader.read_iter():
-    print(common.Time.time(row["time"]), row["open"])
-"""   
+with schema.select("series") as select:
+    for series in select.all():
+        print(series)
+        from tables import *
+        from lib.data import ohlc
+        filters = Filters(complevel = 9, complib = "blosc", fletcher32 = False)
+        with ohlc.OhlcWriter(series, filters, 0, 0, overwrite=False, append=True) as writer:
+            writer._table.cols.time.reindex_dirty()
+            writer.save()
+"""
 
+
+series = schema.select_one("series", schema.table.series.symbol=="ZA.REER.BBAS")
+with data.get_reader(series) as reader:
+    for row in reader.read_iter():
+        print(common.Time.time(row["time"]), row["open"]) 
 
 """
 from lib.process import resample
