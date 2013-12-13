@@ -15,6 +15,7 @@ import base64
 from datetime import datetime
 import time
 import pytz
+import calendar
 from autologging import logged, traced, TracedMethods
 from pywebhdfs.webhdfs import PyWebHdfsClient, errors
 
@@ -114,7 +115,7 @@ class Time (object):
         If no args or pyton_time is None then return current tick time.
         """
         if python_time:
-            return ((time.mktime(python_time.timetuple())*Time.nano_per_second) + 
+            return ((calendar.timegm(python_time.timetuple())*Time.nano_per_second) + 
                     int(python_time.microsecond*1000))
         else:
             return Time.tick(Time.time())

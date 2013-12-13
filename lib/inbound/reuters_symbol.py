@@ -46,7 +46,7 @@ def parse_future_contract (symbol, reference_date):
 
         # find valid contract year given reference date
         for check_year in range(1900 + year, 2200, 10):
-            check_date = datetime(check_year, month, calendar.monthrange(check_year, month)[1])
+            check_date = datetime(check_year, month, calendar.monthrange(check_year, month)[1]).replace(tzinfo=pytz.utc)
             if check_date < reference_date: continue
             else:
                 year = check_year

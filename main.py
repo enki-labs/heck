@@ -37,8 +37,11 @@ def add_file (path, fileinfo):
         schema.save(dbfile)
 
 
-#common.store.walk("inbound", add_file, recursive=True)
+common.log.info("check for new inbound files")
+common.store.walk("inbound", add_file, recursive=True)
+
 inbound_table = schema.table.inbound
+
 """
 common.log.info("Processing Bloomberg symbols")
 with schema.select("inbound", inbound_table.path.like("inbound/bloomberg/symbol/%"), inbound_table.status=="dirty") as select:
@@ -48,15 +51,20 @@ with schema.select("inbound", inbound_table.path.like("inbound/bloomberg/symbol/
             bloomberg_symbol.Import.parse(infile.local())
 """
 
-"""
+
+common.log.info("import tick files")
 import shutil
 from tempfile import NamedTemporaryFile
-with NamedTemporaryFile(delete=True) as ntf:
-    with common.store.read("inbound/reuters/tick/TimeAndSales_FDXZ9_2000-01-01_2009-12-31.csv.gz", open_handle=True) as infile:
-        shutil.copyfileobj(gzip.open(infile.local_path()), ntf)
-        ntf.seek(0, 0)
-        reuters_tick.Import.parse(ntf)
-"""   
+
+with schema.select("inbound", inbound_table.path.like("inbound/reuters/tick/%"), inbound_table.status=="dirty") as select:
+    for inbound in select.all():
+        common.log.info(inbound.path)
+        with NamedTemporaryFile(delete=True) as ntf:
+            with common.store.read(inbound.path, open_handle=True) as infile:
+                shutil.copyfileobj(gzip.open(infile.local_path()), ntf)
+                ntf.seek(0, 0)
+                reuters_tick.Import.parse(ntf)
+   
  
 
 """
@@ -136,6 +144,7 @@ weekEnd: Friday 22:00
 weekStart: Monday 07:50
 """
 
+"""
 from lib.process import filter_tick
 
 search_tags = dict(format="tick", period="tick")
@@ -150,6 +159,8 @@ with schema.select("series", series.tags.contains(search_tags_ids), not_(series.
         print(">>>>>>>>>>>>>>>>>>>>>>>>>>")
         filter_tick.Process.run(selected, dict(config=config_yaml), output_tags)
         print("<<<<<<<<<<<<<<<<<<<<<<<<<<")
+"""
+
 
 
 """

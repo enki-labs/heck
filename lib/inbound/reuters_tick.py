@@ -7,11 +7,35 @@ import datetime
 import pytz
 from lib import data
 from lib import common
+from lib import schema
 from lib.inbound import reuters_symbol
 from lib.data import tick
 
 
 _tick_event = tick.TickEventEnum()
+
+class PriceAdjustment (object):
+
+    def __init__ (self, symbol):
+        symboldef = schema.select_one("symbol_resolve", schema.table.symbol_resolve.resolve==symbol
+                                          , schema.table.symbol_resolve.source=="reuters")
+        if not symboldef: raise Exception("Cannot resolve %s" % (symbol))
+        self._adjustments = symboldef.adjust_dict()["price_adjustments"]
+        self._index = 0
+        self._count = len(self._adjustments)
+
+    def next (self):
+        multiplier = 1.0
+        next_time = None
+
+        if self._index < self._count:
+            multiplier = self._adjustments[self._index]["multiplier"]
+            self._index += 1
+            if self._index < self._count:
+                next_time = adjustments[self._index]["start"]
+
+        return (multiplier, next_time)
+
 
 class Import (object):
 
@@ -74,8 +98,12 @@ class Import (object):
         tags.update(reuters_symbol.parse(ticker, common.Time.time(first)))
         last_line_parts = last_line.split(",")
         last = Import.parse_time(last_line_parts[2], last_line_parts[3])
- 
+        price_adjustment = PriceAdjustment(tags["symbol"])
+        
         with data.get_writer(tags, first=first, last=last, create=True, append=False) as writer:
+
+            multiplier, next_adjustment = price_adjustment.next()
+
             for line in reader.readlines():
                 line = line.decode("utf-8").strip()
                 line_count = line_count + 1
@@ -86,9 +114,15 @@ class Import (object):
                 parts = line.split(",")
                 event = Import.parse_event(parts[5])
                 if event != None:
-                    writer.add( Import.parse_time(parts[2], parts[3])
+                    time = Import.parse_time(parts[2], parts[3])
+
+                    if next_adjustment != None and time >= next_adjustment:
+                        multiplier, next_adjustment = price_adjustment.next()
+
+                    price = Import.parse_value(parts[6])
+                    writer.add( time
                               , event
-                              , Import.parse_value(parts[6])
+                              , (price if price == None else price * multiplier)
                               , Import.parse_value(parts[7])
                               , parts[8]
                               , Import.parse_value(parts[11])
