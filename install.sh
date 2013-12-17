@@ -11,6 +11,8 @@ apt-get install -y libboost-python-dev
 apt-get install -y libssl-dev
 apt-get install -y python3-nose
 apt-get install -y libyaml-dev
+apt-get install -y subversion
+apt-get install -y libfreetype6-dev
 
 easy_install3 logging
 easy_install3 autologging
@@ -20,6 +22,8 @@ easy_install3 numpy
 easy_install3 "numexpr>=2.0"
 easy_install3 pandas
 easy_install3 pyyaml
+easy_install3 -U distribute
+easy_install3 matplotlib
 
 mkdir -p tmp
 pushd tmp
@@ -98,3 +102,37 @@ sudo -u postgres createdb heck
 # vim /usr/local/lib/python3.2/dist-packages/tables-3.0.0-py3.2-linux-x86_64.egg/tables/attributeset.py 
 # line 379 and 342 - "elif name == 'FILTERS':" not "elif name == 'FILTERS' and format_version >= (2, 0):"
 
+
+mkdir -p temp
+pushd temp
+svn checkout svn://svn.twistedmatrix.com/svn/Twisted/tags/releases/twisted-13.2.0
+pushd twisted-13.2.0
+python3 install setup3.py
+popd
+rm -rf twisted-13.2.0
+popd
+
+# patch
+# vim /usr/local/lib/python3.2/dist-packages/Twisted-13.2.0-py3.2-linux-x86_64.egg/twisted/web/iweb.py
+# line 701 - remove u"...
+
+
+mkdir -p temp
+pushd temp
+git clone https://github.com/gpolo/pil-py3k.git
+pushd pil-py3k
+python3 install setup.py
+popd
+rm -rf pil-py3k
+popd
+
+# patch
+# 
+# line 97 - comment out from operator import isNumberType, isSequenceType
+# add code:
+# def isNumberType(t):
+#   return isinstance(t, numbers.Number)
+#
+# def isSequenceType(t):
+#   return isinstance(t, Sequence)
+#

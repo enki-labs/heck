@@ -12,12 +12,12 @@ class DataFrameWrapper (object):
 
     def __init__ (self, series):
         self.series = series
-        self.reader = data.get_reader(series)
-        self.data = self.reader.read()
-        self.dframe = pd.DataFrame.from_records(
-                         self.data
+        with data.get_reader(series) as reader:
+            datatable = reader.read()
+            self.dframe = pd.DataFrame.from_records(
+                         datatable 
                        , index=pd.DatetimeIndex(
-                               pd.Series(self.data["time"]).astype("datetime64[ns]")
+                               pd.Series(datatable["time"]).astype("datetime64[ns]")
                        , tz="UTC"))
 
 
