@@ -18,6 +18,7 @@ import pytz
 import calendar
 from autologging import logged, traced, TracedMethods
 from pywebhdfs.webhdfs import PyWebHdfsClient, errors
+import exception
 
 instanceid = str(uuid.uuid4())
 
@@ -45,8 +46,6 @@ elif store_engine == "posix":
 else:
     raise Exception("Unknown storage engine (%s)" % (store_engine))
 
-class TimeoutException (Exception):
-    pass
 
 class ResourceLock (object):
     """
@@ -76,7 +75,7 @@ class ResourceLock (object):
                 except IntegrityError:
                     wait_count = wait_count + 0.5
                     if timeout_secs and wait_count > timeout_secs:
-                        raise TimeoutException("lock (%s) timed out" % (self._name))
+                        raise exception.TimeoutException("lock (%s) timed out" % (self._name))
                     else:
                         time.sleep(0.5) # wait
             elif lock and lock.instance == instanceid:
@@ -90,6 +89,20 @@ class ResourceLock (object):
 
     def __del__ (self):
         self.release()
+
+
+class ScopedResourceLock (object):
+    def __init__ (self, name, timeout_secs=None):
+        self._timeout = timeout_secs
+        self._lock = ResourceLock(name)
+
+    def __enter__ (self):
+        self._lock.acquire(self._timeout)
+        return self
+
+    def __exit__ (self, typ, value, tb):
+        self._lock.release()
+    
 
 
 class Time (object):

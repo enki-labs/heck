@@ -2,6 +2,8 @@
 
 set -e
 
+apt-get update
+
 apt-get install -y build-essential
 apt-get install -y git
 apt-get install -y python3-setuptools
@@ -13,6 +15,7 @@ apt-get install -y python3-nose
 apt-get install -y libyaml-dev
 apt-get install -y subversion
 apt-get install -y libfreetype6-dev
+apt-get install -y curl
 
 easy_install3 logging
 easy_install3 autologging
@@ -24,6 +27,16 @@ easy_install3 pandas
 easy_install3 pyyaml
 easy_install3 -U distribute
 easy_install3 matplotlib
+
+pip-3.2 install -U Celery
+pip-3.2 install -U flower
+pip-3.2 install -U supervisor
+
+mkdir -p tmp
+pushd tmp
+curl https://raw.github.com/pypa/pip/master/contrib/get-pip.py | python3
+rm get-pip.py
+popd
 
 mkdir -p tmp
 pushd tmp
@@ -136,3 +149,23 @@ popd
 # def isSequenceType(t):
 #   return isinstance(t, Sequence)
 #
+
+apt-get install -y rabbitmq-server
+rabbitmqctl add_user celery pass
+rabbitmqctl add_vhost task
+rabbitmqctl set_permissions -p task celery ".*" ".*" ".*"
+
+
+
+# apt-get python-pip
+# pip install supervisor
+# 
+#mkdir -p temp
+#pushd temp
+#git clone https://github.com/scottkmaxwell/supervisor.git
+#pushd supervisor
+#python3 install setup.py
+#popd
+#rm -rf supervisor
+#popd
+

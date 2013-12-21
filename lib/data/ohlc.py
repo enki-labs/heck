@@ -59,10 +59,3 @@ class OhlcWriter (Writer):
         row['actual'] = actual
         row.append()
 
-    def save (self):
-        """
-        Write new file to store.
-        """
-        if self._store:
-            self._store.save()
-

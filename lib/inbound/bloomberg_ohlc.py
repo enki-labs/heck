@@ -62,7 +62,7 @@ class Import (object):
                                     for row in cache:
                                         writer.add(*row)
                                     writer.save()
-                            except data.OverlapException:
+                            except exception.OverlapException:
                                 common.log.info("ignore overlapping data")
                             cache = []
 

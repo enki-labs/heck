@@ -14,6 +14,8 @@ from lib.inbound import bloomberg_ohlc
 from lib.inbound import reuters_tick
 from lib.inbound import bloomberg_symbol
 from sqlalchemy import and_, not_
+from lib import process
+
 
 def add_file (path, fileinfo):
     """ Check inbound files for new or modified files """
@@ -38,7 +40,61 @@ def add_file (path, fileinfo):
 
 
 common.log.info("check for new inbound files")
-common.store.walk("inbound", add_file, recursive=True)
+#common.store.walk("inbound", add_file, recursive=True)
+
+proc = schema.table.process()
+proc.search_dict["include"] = {"period":"1day"}
+proc.search_dict["exclude"] = {}
+proc.output_dict["add"] = {"period":"week_mon"}
+proc.output_dict["remove"] = {"provider":None}
+proc.output_dict["params"] = {"period":"W-MON"}
+proc.last_modified = 0
+proc.name = "Day To Week Monday"
+proc.processor = "resample"
+schema.save(proc)
+
+
+"""
+#p = process.Process(None)
+#p._tag_generator_multi()
+
+t = schema.table.process()
+t.search_dict["include"] = {"year":"2009", "symbol":"ES", "class":"index"}
+t.search_dict["exclude"] = dict(month="6")
+t.output_dict["add"] = dict(testing="test")
+t.output_dict["remove"] = dict(provider=None)
+t.id = 0
+proc = process.Process(t)
+
+series = schema.table.series
+
+def queue (process, tags, depend):
+    from collections import OrderedDict
+    from sqlalchemy.exc import IntegrityError
+    queued = schema.table.process_queue()
+    queued.process = process
+    queued.tags = tags
+    queued.depend = depend
+    try:
+        schema.save(queued)
+    except IntegrityError:
+        pass
+
+for generated in proc._generate_multi():
+    try:
+        with schema.select("series"
+                         , series.tags.contains(data.resolve_tags(generated["tags"], create=False))) as select:
+            selected = select.all()
+            if len(selected) > 0:
+                if selected[0].last_modified < generated["last_modified"]:
+                    queue(t.id, generated["tags"], generated["depend"])
+                else:
+                    print("OK", generated["tags"])
+            else:
+                queue(t.id, generated["tags"], generated["depend"])
+    except Exception:
+        queue(t.id, generated["tags"], generated["depend"])
+""" 
 
 inbound_table = schema.table.inbound
 
@@ -51,7 +107,7 @@ with schema.select("inbound", inbound_table.path.like("inbound/bloomberg/symbol/
             bloomberg_symbol.Import.parse(infile.local())
 """
 
-
+"""
 common.log.info("import tick files")
 import shutil
 from tempfile import NamedTemporaryFile
@@ -64,7 +120,8 @@ with schema.select("inbound", inbound_table.path.like("inbound/reuters/tick/%"),
                 shutil.copyfileobj(gzip.open(infile.local_path()), ntf)
                 ntf.seek(0, 0)
                 reuters_tick.Import.parse(ntf)
-   
+"""
+
  
 
 """

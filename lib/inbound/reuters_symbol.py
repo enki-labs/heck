@@ -76,7 +76,7 @@ def parse (symbol, reference_date):
     if symbol_map:
         definition["symbol"] = symbol_map.resolve
     else:
-        raise Exception("Cannot resolve Reuter symbol (%s)" % (definition["symbol"]))
+        raise Exception("Cannot resolve Reuters symbol (%s)" % (definition["symbol"]))
     
     return definition
 

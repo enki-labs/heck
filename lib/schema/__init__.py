@@ -10,6 +10,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import sql
 from bunch import Bunch
 import os
+import json
 from lib import common
 
 """ Initial loading """
@@ -56,7 +57,9 @@ class SessionWrapper (object):
 def select (table_name, *criterion):
     """ Select one or more elements from a table """
     session = session_factory()
-    return SessionWrapper(session, session.query(table[table_name]).filter(*criterion))
+    query = session.query(table[table_name]).filter(*criterion)
+    #if limit: query = query.limit(limit)
+    return SessionWrapper(session, query)
     
 def select_one (table_name, *criterion):
     """ Select one element from a table """
@@ -111,4 +114,51 @@ def refresh (obj):
     """ Refresh the object """
     if obj._sa_instance_state.session:
         obj._sa_instance_state.session.refresh(obj)
-    
+   
+
+class StringDictionaryWrapper (object):
+    """
+    Provide a dictionary-like interface to string fields 
+    serialized as JSON.
+    """
+
+    def __init__ (self, target, attribute):
+        """
+        Init with a target string field.
+        The field value will be defaulted to an empty dictionary.
+        """
+        self._target = target
+        self._attribute = attribute
+        if not getattr(target, attribute):
+            setattr(target, attribute, "{}")
+
+    def _parse (self):
+        """ Parse JSON serialized dictionary """
+        return json.loads(getattr(self._target, self._attribute))
+
+    def _encode (self, value):
+        """ Encode dictionary as JSON serialized string """
+        setattr(self._target, self._attribute, json.dumps(value))
+
+    def __getitem__ (self, key):
+        return self._parse().__getitem__(key)
+
+    def __setitem__ (self, key, value):
+        temp = self._parse()
+        temp.__setitem__(key, value)
+        self._encode(temp)
+
+    def __delitem__ (self, key):
+        temp = self._parse()
+        temp.__delitem__(key)
+        self._encode(temp)
+
+    def __iter__ (self):
+        return self._parse().__iter__()
+
+    def __len__ (self):
+        return self._parse().__len__()
+
+    def __contains__ (self, x):
+        return self._parse().__contains__(x) 
+

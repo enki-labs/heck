@@ -4,9 +4,11 @@ Global methods for data stores.
 """
 
 import time
+import exception
 from lib import common
 from lib import schema
 from tables import *
+
 
 def decode_tags (tag_ids):
     """
@@ -16,7 +18,7 @@ def decode_tags (tag_ids):
     for tag_id in tag_ids:
         tag = schema.select_one("tag", schema.table.tag.id==tag_id)
         if not tag:
-            raise Exception("Tag id %s does not exist" % (tag_id))
+            raise exception.MissingTagException("Tag id %s does not exist" % (tag_id))
         tags[tag.name] = tag.value
     return tags    
 
@@ -29,7 +31,7 @@ def resolve_tags (tags, create):
     for name, value in tags.items():
         tag = schema.select_one("tag", schema.table.tag.name==name, schema.table.tag.value==value)
         if not tag and not create:
-            raise Exception("Tag %s (%s) does not exist" % (name, value))
+            raise exception.MissingTagException("Tag %s (%s) does not exist" % (name, value))
         elif not tag:
             tag = schema.table.tag()
             tag.name = name
@@ -99,11 +101,6 @@ def update_series (series, count, tick_start, tick_end):
     series.last_modified = common.Time.tick()
     schema.save(series)
     
-
-class OverlapException (Exception):
-    """ Data insertion would overlap existing data """
-    pass
-
 
 class Reader (object):
     """
@@ -202,7 +199,7 @@ class Writer (object):
                 if row["time"] > self._first:
                     if not overwrite:
                         if self._last > row["time"]:
-                            raise OverlapException()
+                            raise exception.OverlapException()
                         else:
                             break
                     else:
