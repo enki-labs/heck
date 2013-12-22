@@ -1,0 +1,12 @@
+{
+    "name" : "ts-toolkit",
+    "version" : "1.0.0",
+    "private" : true,
+    "dependencies" : {
+        "argparse" : "*",
+        "express" : "*",
+        "json2csv" : "*",
+        "request" : "*",
+        "ejs" : "*"
+    }
+}

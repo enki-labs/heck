@@ -16,6 +16,7 @@ apt-get install -y libyaml-dev
 apt-get install -y subversion
 apt-get install -y libfreetype6-dev
 apt-get install -y curl
+apt-get install -y memcached
 
 easy_install3 logging
 easy_install3 autologging
@@ -27,6 +28,7 @@ easy_install3 pandas
 easy_install3 pyyaml
 easy_install3 -U distribute
 easy_install3 matplotlib
+easy_install3 python3-memcached
 
 pip-3.2 install -U Celery
 pip-3.2 install -U flower
@@ -168,4 +170,21 @@ rabbitmqctl set_permissions -p task celery ".*" ".*" ".*"
 #popd
 #rm -rf supervisor
 #popd
+
+mkdir -p temp
+pushd temp
+wget http://nodejs.org/dist/v0.10.24/node-v0.10.24.tar.gz
+tar -xvzf node-v0.10.24.tar.gz
+pushd node-v0.10.24
+./configure
+make
+make install
+popd
+rm -rf node-v0.10.24
+git clone git://github.com/isaacs/npm.git
+pushd npm
+make install
+popd
+rm -rf npm
+popd
 

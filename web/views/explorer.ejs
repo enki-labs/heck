@@ -1,0 +1,501 @@
+<% include header %>
+<% include mainnav %>
+
+
+<div class="container-fluid" style="height: 100%;">
+    <div class="row-fluid">    
+        <div class="span3" style="white-space: nowrap; overflow-y: auto;">
+            <div class="input-append">
+                <input type="text" value="" id="search" class="span2">
+                <button class="btn" type="button" id="search-run">Search</button>
+            </div>
+            <button class="btn-mini" type="button" id="copy-selected" data-clipboard-text="">Copy Selected</button>
+            <div id="task" style="width:100%; height: 700px;">
+            </div>
+        </div>
+
+        <div class="span9">   
+            <div id="plot-buttons" class="input-append">
+                <button class="btn" type="button" id="plot-left-zero"><i class="icon-fast-backward"></i></button>
+                <button class="btn" type="button" id="plot-left"><i class="icon-backward"></i></button>
+                <input class="span1" id="plot-count" type="text" value="1000">
+                <button class="btn" type="button" id="plot-right"><i class="icon-forward"></i></button>
+                <button class="btn" type="button" id="plot-right-zero"><i class="icon-fast-forward"></i></button>
+                <button class="btn" type="button" id="plot-unzoom"><i class="icon-zoom-out"></i></button>
+            </div>
+            <div id="plot" style="height: 700px;"></div>
+        </div>
+
+    </div>
+</div>
+
+<ul id="contextMenu" style="display:none;position:absolute">
+  <li data="Save CSV">Save CSV</li>
+  <li data="View">View</li>
+  <li data="HighLow Distribution">HighLow Distribution</li>
+  <li data="HighLow Distribution ALL">HighLow Distribution ALL</li>
+</ul>
+
+
+<% include scripts %>
+<script src="http://code.highcharts.com/stock/highstock.js" type="text/javascript"></script>
+<script src="http://code.highcharts.com/stock/highcharts-more.js" type="text/javascript"></script>
+<script src="http://code.highcharts.com/stock/modules/exporting.js" type="text/javascript"></script>
+<script src="js/ZeroClipboard.min.js"></script>
+<link type="text/css" rel="stylesheet" href="js/tooltip.css"></link>
+<script src="js/tooltip.js"></script>
+
+<style>
+    .cell-title {
+      font-weight: bold;
+    }
+
+    #contextMenu {
+      background: #D8E5E8;
+      border: 1px solid gray;
+      padding: 2px;
+      display: inline-block;
+      min-width: 100px;
+      -moz-box-shadow: 2px 2px 2px silver;
+      -webkit-box-shadow: 2px 2px 2px silver;
+      z-index: 99999;
+    }
+
+    #contextMenu li {
+      padding: 4px 4px 4px 14px;
+      list-style: none;
+      cursor: pointer;
+      background: url("../images/arrow_right_peppermint.png") no-repeat center left;
+    }
+
+    #contextMenu li:hover {
+      background-color: white;
+    }
+  </style>
+
+
+<script>
+
+    $(document).ready(function() {
+        var clip = new ZeroClipboard($("#copy-selected"), { moviePath: "/js/ZeroClipboard.swf" });
+        clip.on( 'load', function(){ console.log('Loaded copy'); } );
+        clip.on('mousedown', function() {
+            var grid = $("#task").data("grid");
+            var copyText = "";
+            jQuery.each(grid.getSelectedRows(), function (index, value) {
+                copyText += grid.getData()[value]._id;
+            });            
+            clip.setText(copyText); 
+        });
+        clip.on('complete', function(client,args){ console.log('copied'); });
+    });
+
+    $("#contextMenu").click(function (e) {
+        var target = $(e.target);
+        if (!target.is("li")) 
+        {
+          return;
+        }
+        if (!grid.getEditorLock().commitCurrentEdit()) {
+          return;
+        }
+
+        if (target.text() == "View")
+        {
+            $.load_file(grid.getData()[$(this).data("row")]);
+        }
+        else if (target.text() == "Save CSV")
+        {
+            $.csv_file(grid.getData()[$(this).data("row")]);
+        }
+        else if (target.text() == "HighLow Distribution")
+        {
+            $.highlow_distribution([grid.getData()[$(this).data("row")]], grid.getData()[$(this).data("row")].tags.join("_"));
+        }
+        else if (target.text() == "HighLow Distribution ALL")
+        {
+            $.highlow_distribution(grid.getData(), $("#search").val().replace(",", "_"));
+        }        
+    });
+
+    var grid;
+
+    function sparkFormatter (row, cell, value, columnDef, dataContext)
+    {
+        //var buttons = "<a class='btn btn-primary btn-mini' id='" + dataContext.id + "'><i class='icon-plus icon-white'></i> Clone</a>";
+        return '<img src="/api/spark?width=2.6&height=0.4&id=' + dataContext.id + '" alt="sparkline" />';
+        //return buttons;
+    }
+
+    var columns = [
+        {id: "tagsString", name: "Tag", field: "tagsString", width: 190, sortable: true},
+        {id: "_id", name: "", field: "_id", width: 210, sortable: false, formatter: sparkFormatter}
+        //{id: "_id", name: "Id", field: "_id", width: 250, sortable: false}
+        //{id: "actions", name: "Actions", field: "actions", width: 200, formatter: actionFormatter}
+    ];
+    
+    function actionFormatter (row, cell, value, columnDef, dataContext)
+    {
+        var buttons = "<a class='btn btn-primary btn-mini' id='" + dataContext.id + "'><i class='icon-plus icon-white'></i> Clone</a>";
+        
+        return buttons;
+    }
+
+    var tableOptions = {
+        rowHeight: 38,
+        editable: true,
+        enableAddRow: false,
+        enableCellNavigation: true,
+        enableColumnReorder: true
+    };
+
+    $.task_edit_load = function (data)
+    {
+        $(':input[name="name"]').val(data.name);
+        $(':input[name="searchTags"]').val(data.searchTags.join(","));
+        $(':input[name="addTags"]').val(data.addTags.join(","));
+        $(':input[name="removeTags"]').val(data.removeTags.join(","));
+        var regexBackslash = new RegExp("\\\\\\\\", "g");
+        $(':input[name="detail"]').val(JSON.stringify(data.detail).replace(regexBackslash, "\\"));
+        $(':input[name="_id"]').val(data._id);
+        $('#task-edit').modal();
+    };
+
+    $.task_edit_reset = function ()
+    {
+        $.task_edit_load({name:'', searchTags:[], addTags:[], removeTags:[], detail:'', _id:''});
+        $('#task-edit').modal('hide');
+    };
+
+    $.task_edit_tojson = function ()
+    {
+        data = {};
+        data.name = $(':input[name="name"]').val();
+        data.searchTags = $(':input[name="searchTags"]').val().length > 0 ? $(':input[name="searchTags"]').val().split(',') : [];
+        data.addTags = $(':input[name="addTags"]').val().length > 0 ? $(':input[name="addTags"]').val().split(',') : [];
+        data.removeTags = $(':input[name="removeTags"]').val().length > 0 ? $(':input[name="removeTags"]').val().split(',') : [];
+        var regexBackslash = new RegExp("\\\\", "g");
+        data.detail = $(':input[name="detail"]').val().length > 0 ? JSON.parse($(':input[name="detail"]').val().replace(regexBackslash, "\\\\")) : {};
+        data._id = $(':input[name="_id"]').val();
+        return data;
+    };
+
+    function save (data, callback)
+    {
+	    $.post("/task/save", {content: JSON.stringify(data)}).done( function(response) {
+            find({}, {}, callback);
+	    });
+    };
+
+    function find (searchTags, callback)
+    {
+        $.get("/api/find", {tags: JSON.stringify(searchTags)}).done( function(data) {
+            var parsedData = data; //JSON.parse(data);
+            jQuery.each(parsedData, function (index, element) {
+                parsedData[index].tagsString = JSON.stringify(parsedData[index].tags); //parsedData[index].tags.reverse().join(","); console.log(parsedData[index].tagsString);
+            });
+            grid = new Slick.Grid("#task", parsedData, columns, tableOptions);
+	        grid.setSelectionModel(new Slick.RowSelectionModel());
+	        //grid.onSelectedRowsChanged.subscribe(function(e, args) { $.load_file(grid.getData()[args.rows[0]]); });
+            grid.onDblClick.subscribe(function(e, args) { $.load_file(grid.getData()[grid.getCellFromEvent(e).row]); });
+            grid.onSort.subscribe(function(e, args){ // args: sort information. 
+                var field = args.sortCol.field;
+
+                grid.getData().sort(function(a, b){
+                    var result = 
+                        a[field] > b[field] ? 1 :
+                        a[field] < b[field] ? -1 :
+                        0;
+
+                    return args.sortAsc ? result : -result;
+                });
+
+                grid.invalidate();         
+            });
+            
+            grid.onContextMenu.subscribe(function (e) {
+                e.preventDefault();
+                var cell = grid.getCellFromEvent(e);
+
+                $("#contextMenu")
+                    .data("row", cell.row)
+                    .css("top", e.pageY)
+                    .css("left", e.pageX)
+                    .show();
+                                
+                $("body").one("click", function () {                    
+                    $("#contextMenu").hide();
+                });
+            });
+            
+            $("#task").data("grid", grid);
+            
+            callback();
+	    });
+    };
+
+    $(function() {
+
+        $("#search-run").click(function() {
+            $('#task-edit').modal('hide');
+            var searchElems = $("#search").val().split(",");
+            var searchDict = {};
+            jQuery.each(searchElems, function (index, element) {
+                var tagParts = element.split(":");
+                searchDict[tagParts[0]] = tagParts[1];
+            });
+            find(searchDict, function () {});
+        });
+
+        $("#search").keyup(function(event){
+            if(event.keyCode == 13) {
+                $("#search-run").click();
+            }
+        });
+        
+        $("#task-edit-clone").click(function() {
+            var jsonData = $.task_edit_tojson();
+            jsonData._id = "";
+            save(jsonData, function () {
+                $.task_edit_reset();
+            });
+        });
+
+        $("#task-edit-reset").click(function() {
+            $.task_edit_reset();
+        });
+
+        $("#task-edit-save").click(function() {
+            save($.task_edit_tojson(), function () {
+                $.task_edit_reset();
+            });
+        });
+    });
+    
+
+$.csv_file = function (detail)
+{    
+    var hiddenIFrameID = 'hiddenDownloader',
+        iframe = document.getElementById(hiddenIFrameID);
+    if (iframe === null) {
+        iframe = document.createElement('iframe');
+        iframe.id = hiddenIFrameID;
+        iframe.style.display = 'none';
+        document.body.appendChild(iframe);
+    }
+    iframe.src = "/getdata?output=csv&file=" + encodeURIComponent(detail._id) + "&outputname=" + encodeURIComponent(detail.tags.join("_"));
+};
+
+$.highlow_distribution = function (files, name)
+{
+    var hiddenIFrameID = 'hiddenDownloader',
+        iframe = document.getElementById(hiddenIFrameID);
+    if (iframe === null) {
+        iframe = document.createElement('iframe');
+        iframe.id = hiddenIFrameID;
+        iframe.style.display = 'none';
+        document.body.appendChild(iframe);
+    }
+    
+    var fileList = "";
+    files.forEach(function(f){
+        if (fileList.length > 0) fileList += "|";
+        fileList += f._id;
+    });
+    
+    iframe.src = "/getdata?output=distribution&file=" + encodeURIComponent(fileList) + "&outputname=" + encodeURIComponent(name);
+};
+
+$.load_file = function (detail)
+{
+    Highcharts.setOptions({ global : { useUTC : false } });
+
+    if (window.chart)
+    {
+        window.chart.showLoading('Loading data from server...');
+        $("#plot-left").unbind("click");
+        $("#plot-right").unbind("click");
+        $("#plot-left-zero").unbind("click");
+        $("#plot-right-zero").unbind("click");
+        $("#plot-unzoom").unbind("click");
+        $("#plot-count").unbind("keyup");
+        delete window.chart;
+    }
+
+    function saveZoom (e)
+    {
+        if (e.trigger == 'zoom' && !window.chartExtremes)
+        {                       
+            window.chartExtremes = this.getExtremes();
+        }
+    }
+	
+    function createUpdateFunction (baseUrl, direction)
+    {
+        return function (e, override) 
+        {
+            console.log("CREATE UPDATE FUNCTION");
+            if (window.chartExtremes)
+            {
+                window.chart.xAxis[0].setExtremes(window.chartExtremes.dataMin, window.chartExtremes.dataMax);
+                window.chartExtremes = null;
+            }
+
+            var plotCount = parseInt($('#plot-count').val());
+
+            if (e.trigger == 'rangeSelectorButton')
+            {
+                if (direction > 0)
+                {
+                    if (typeof override != 'undefined')
+                    {
+                        window.chartRange.to = override;
+                        window.chartRange.from = override - plotCount;
+                    }
+                    else
+                    {
+                        window.chartRange.to = Math.min(window.chartRange.max, (window.chartRange.to + plotCount));
+                        window.chartRange.from = window.chartRange.to - plotCount;
+                    }
+                }
+                else
+                {
+                    if (typeof override != 'undefined')
+                    {
+                        window.chartRange.from = override;
+                        window.chartRange.to = Math.min((override + plotCount), window.chartRange.max);
+                    }
+                    else
+                    {
+                        window.chartRange.from -= plotCount;
+                        window.chartRange.from = Math.max(0, window.chartRange.from);
+                        window.chartRange.to = window.chartRange.from + plotCount;
+                    }
+                }
+
+	            window.chart.showLoading('Loading data from server...');
+	            $.getJSON(baseUrl+ '&start=' + window.chartRange.from + '&end='+ window.chartRange.to,
+                            function(data) {
+		                        window.chart.series[0].setData(data.ohlc);
+                                        //window.chart.series[1].setData(data.adj);
+                                        
+                                        window.adjs.forEach(function (adj) {
+                                            window.chart.xAxis[0].removePlotBand(adj.name);
+                                        });
+
+                                        data.adj.forEach(function (adj) {
+                                            window.chart.xAxis[0].addPlotBand({from: adj.x-40000000, to: adj.x+40000000, color: 'rgba(220,0,0,0.5)', events: { mouseover: function (e) {tooltip.pop(null, this, {relativeTo: "mouse"});}.bind(adj.name)}});
+                                        });
+
+		                        window.chart.series[1].setData(data.volume);
+                                var ex = window.chart.xAxis[0].getExtremes();
+                                window.chart.xAxis[0].setExtremes(ex.dataMin, ex.dataMax);
+		                        window.chart.hideLoading();
+	                        }
+                );
+            }
+        };
+    }
+
+    var url = "/api/data?id=" + detail.id;
+    if (window.chart)
+    {
+        window.chart.showLoading('Loading data from server...');
+    }
+
+	$.getJSON(url + "&start=0&end=" + $('#plot-count').val(), function(data) {           
+        var plotType = 'ohlc'; 
+        if ($.inArray("filtered", detail.tag) > -1) { plotType = 'line'; }
+
+        if (data.hasHighLow == false) { plotType = 'line'; }
+
+        window.chartRange = {from: data.from, to: data.to, max: data.max};
+	    window.chart = new Highcharts.StockChart({
+			    chart : { renderTo : 'plot', type: 'line', zoomType: 'x' },
+                            navigator : {
+			        adaptToUpdatedData: false,
+			        series : {
+			            data : data.summary,
+                                    dataGrouping: { enabled: false }
+			        }
+			    },
+			    rangeSelector : { selected: 1, enabled: false },
+			    title : { text : null },
+                            tooltip: { valueDecimals: 6, xDateFormat: "%Y-%m-%d %H:%M:%S%L" },
+                            xAxis : {
+			        events : {
+				    setExtremes : saveZoom
+				},
+				minRange: 1 // one microsecond
+                                ,
+                                plotBands : []
+			    },
+                            yAxis : [ {
+                                        title: { text: 'OHLC' },
+                                        height: 460
+                                      },
+                                      {
+                                        title: { text: 'Volume' },
+                                        top: 500,
+                                        height: 100,
+                                        offset: 0
+                                      }
+                            ],
+                            scrollbar : { enabled: false },
+	                    series : [{
+			        type : plotType,
+			        name : '',
+			        data : data.ohlc,
+			        dataGrouping : { enabled: false }
+			      },
+                              //{
+                              //  type : 'scatter',
+                              //  name : 'Adjustment',
+                              //  data : data.adj,
+                              //  marker: { symbol: 'circle', radius: 1.5 }
+                              //},
+                              {
+                                type: 'column',
+                                name: '',
+                                data: data.volume,
+                                dataGrouping : { enabled: false },
+                                yAxis: 1
+                              }
+                            ],
+                            plotOptions: { scatter: { tooltip: { pointFormat: '{point.name}' } } }
+        });
+        window.adjs = data.adj;
+        data.adj.forEach(function (adj) {
+            window.chart.xAxis[0].addPlotBand({id: adj.name, from: adj.x-40000000, to: adj.x+40000000, color: 'rgba(220,0,0,0.5)', events: { mouseover: function (e) {tooltip.pop(null, this, {relativeTo: "mouse"});}.bind(adj.name)}});
+        });
+        window.chart.hideLoading();
+        var left = createUpdateFunction(url, -1);
+        var right = createUpdateFunction(url, 1);
+        $("#plot-left").click(function() {
+            left({trigger: 'rangeSelectorButton'});
+        });
+        $("#plot-right").click(function() {
+            right({trigger: 'rangeSelectorButton'});
+        });
+        $("#plot-left-zero").click(function() {
+            left({trigger: 'rangeSelectorButton'}, 0);
+        });
+        $("#plot-right-zero").click(function() {
+            right({trigger: 'rangeSelectorButton'}, window.chartRange.max);
+        });
+        $("#plot-unzoom").click(function() {
+            if (window.chartExtremes) { window.chart.xAxis[0].setExtremes(window.chartExtremes.dataMin, window.chartExtremes.dataMax); window.chartExtremes = null; }
+        });
+        $("#plot-count").keyup(function(event){
+            if(event.keyCode == 13) {
+                left({trigger: 'rangeSelectorButton'}, window.chartRange.from);
+            }
+        });
+    });
+}
+
+</script>
+
+
+<% include footer %>
+

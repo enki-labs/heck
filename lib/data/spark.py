@@ -6,7 +6,7 @@ from pylab import *
 # set engine
 matplotlib.use('Agg')
 
-class Spark:
+class Spark (object):
     """
     Generate spark plots.
     """
