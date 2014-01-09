@@ -197,7 +197,7 @@ class Writer (object):
             #find overlapping region
             for row in self._table.itersorted(self._table.cols.time):
                 if row["time"] > self._first:
-                    if not overwrite:
+                    if not self._overwrite:
                         if self._last > row["time"]:
                             raise exception.OverlapException()
                         else:

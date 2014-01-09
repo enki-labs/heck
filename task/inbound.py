@@ -112,6 +112,7 @@ def bloomberg_ohlc (path):
 
     with schema.select("inbound", inbound.path==path) as select:
         for inbound_file in select.all():
+            common.log.info("process %s" % (inbound_file))
             with common.store.read(inbound_file.path, open_handle=True) as infile:
                 bloomberg_ohlc.Import.parse(gzip.GzipFile(fileobj=infile.local()))
                 inbound_file.status = "imported"
