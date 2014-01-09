@@ -17,12 +17,14 @@ apt-get install -y subversion
 apt-get install -y libfreetype6-dev
 apt-get install -y curl
 apt-get install -y memcached
+apt-get install -y libpng-dev
 
-easy_install3 logging
+easy_install3 decorator
+#easy_install3 logging#
 easy_install3 autologging
-easy_install3 pylint
+easy_install3 pylint#
 easy_install3 pytz
-easy_install3 numpy
+easy_install3 numpy#
 easy_install3 "numexpr>=2.0"
 easy_install3 pandas
 easy_install3 pyyaml
@@ -30,15 +32,15 @@ easy_install3 -U distribute
 easy_install3 matplotlib
 easy_install3 python3-memcached
 
-pip-3.2 install -U Celery
-pip-3.2 install -U flower
-pip-3.2 install -U supervisor
-
 mkdir -p tmp
 pushd tmp
 curl https://raw.github.com/pypa/pip/master/contrib/get-pip.py | python3
 rm get-pip.py
 popd
+
+pip-3.2 install -U Celery
+pip-3.2 install -U flower
+#pip-3.2 install -U supervisor
 
 mkdir -p tmp
 pushd tmp
@@ -51,6 +53,7 @@ popd
 rm -rf Cython-0.19.2
 popd
 
+apt-get install -y libhdf5-serial-dev
 easy_install3 tables
 
 mkdir -p tmp
@@ -99,6 +102,8 @@ popd
 ./hdfs-start.sh
 #hdfs dfs -mkdir -p /inbound/bloomberg
 
+# vim /usr/local/lib/python3.2/dist-packages/pywebhdfs-0.2.1-py3.2.egg/pywebhdfs/webhdfs.py
+# httplib becomes http.client
 easy_install3 pywebhdfs
 
 easy_install3 SQLAlchemy
@@ -117,12 +122,13 @@ sudo -u postgres createdb heck
 # vim /usr/local/lib/python3.2/dist-packages/tables-3.0.0-py3.2-linux-x86_64.egg/tables/attributeset.py 
 # line 379 and 342 - "elif name == 'FILTERS':" not "elif name == 'FILTERS' and format_version >= (2, 0):"
 
+easy_install3 zope.interface
 
 mkdir -p temp
 pushd temp
 svn checkout svn://svn.twistedmatrix.com/svn/Twisted/tags/releases/twisted-13.2.0
 pushd twisted-13.2.0
-python3 install setup3.py
+python3 setup3.py install
 popd
 rm -rf twisted-13.2.0
 popd
@@ -136,12 +142,12 @@ mkdir -p temp
 pushd temp
 git clone https://github.com/gpolo/pil-py3k.git
 pushd pil-py3k
-python3 install setup.py
+python3 setup.py install
 popd
 rm -rf pil-py3k
 popd
 
-# patch
+# patch /usr/local/lib/python3.2/dist-packages/PIL/Image.py
 # 
 # line 97 - comment out from operator import isNumberType, isSequenceType
 # add code:
