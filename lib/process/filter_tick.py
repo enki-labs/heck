@@ -12,30 +12,31 @@ from lib.data import tick
 
 
 class EventFilter (object):
+    """ Filter based on the tick event type """
 
     def __init__ (self, event):
         self._event = tick.TickEventEnum().lookup(event)
 
-    def filter (self, row, log):
+    def filter (self, row):
         if row["event"] == self._event:
-            log.filter("Event", "%s != %s" % (row["event"], self._event), row)
-            return True
-        else: return False
+            return ("event", "%s != %s" % (row["event"], self._event))
+        else: return None
 
 
 class NanFilter (object):
+    """ Filter ticks where the given column is of type NAN """
 
     def __init__ (self, column):
         self._column = column
 
-    def filter (self, row, log):
+    def filter (self, row):
         if np.isnan(row[self._column]):
-            log.filter("NAN", "%s is nan" % (self._column), row)
-            return True
-        else: return False
+            return ("nan", "%s is nan" % (self._column))
+        else: return None
 
 
 class WeekendFilter (object):
+    """ Filter ticks within the weekend boundary of a given timezone and market """
 
     def __init__ (self, timezone=None, weekend=None, weekstart=None):
         self._timezone = pytz.timezone(timezone)
@@ -47,7 +48,7 @@ class WeekendFilter (object):
         self._next_enter_filter = None
         self._next_exit_filter = None
 
-    def filter (self, row, log):
+    def filter (self, row):
         time = row["time"]
         filter_tick = False
 
@@ -66,9 +67,8 @@ class WeekendFilter (object):
                 filter_tick = False
 
         if filter_tick:
-            log.filter("Weekend", "", row)
-            return True
-        else: return False 
+            return ("weekend", "")
+        else: return None 
                
     def _update_enter_exit (self, time):
         localtime = common.Time.time(time).astimezone(self._timezone)
@@ -91,6 +91,7 @@ class WeekendFilter (object):
 
 
 class QualifierFilter (object):
+    """ Filter ticks based on the string qualifiers """
 
     def __init__ (self, match):
         self._match = re.compile(match)
@@ -98,37 +99,41 @@ class QualifierFilter (object):
 
     def filter (self, row, log):
         if self._match.match(row["qualifier"].decode("utf-8")):
-            log.filter("Qualifier", "%s" % (self._match_string), row)
+            log.filter("Qualifier", "%s" % (self._match_string))
             return True
         else: return False
 
 class FloorFilter (object):
+    """ Filter based on a lower boundary """
 
     def __init__ (self, min_value, column):
         self._min_value = min_value
         self._column = column
 
-    def filter (self, row, log):
+    def filter (self, row):
         if row[self._column] < self._min_value:
-            log.filter("Floor", "%s < %s" % (self._column, self._min_value), row)
-            return True
-        else: return False
+            return ("floor", "%s < %s" % (self._column, self._min_value))
+        else: return None
 
 
 class CapFilter (object):
+    """ Filter based on an upper boundary """
 
     def __init__ (self, max_value, column):
         self._max_value = max_value
         self._column = column
 
-    def filter (self, row, log):
+    def filter (self, row):
         if row[self._column] > self._max_value:
-            log.filter("Cap", "%s > %s" % (self._column, self._max_value), row)
-            return True
-        else: return False
+            return ("cap", "%s > %s" % (self._column, self._max_value))
+        else: return None
 
 
 class StepFilter (object):
+    """ Filter based on a bounded tick-to-tick step. Where the two tick
+        times are more than a given number of seconds apart the step
+        will be ignored. Repeated failed ticks will only be processed
+        up to a given maximum count after which the previous tick resets """
 
     def __init__ (self, timeout_seconds, max_step, max_count, column):
         self._filter_count = 0
@@ -140,7 +145,7 @@ class StepFilter (object):
         self._last_value = None
         self._filter_desc = "(%s) Column(%s)" % (max_step, column)
 
-    def filter (self, row, log):
+    def filter (self, row):
 
         filtered = False
         value = row[self._column]
@@ -159,12 +164,13 @@ class StepFilter (object):
             filtered = False
 
         if filtered:
-            log.filter("Step", self._filter_desc, row)
-        return filtered    
+            return ("step", self._filter_desc)
+        else: return None    
             
 
 
 class Config (object):
+    """ Parse a filter config in YAML format """
 
     def __init__ (self, config_yaml):
         """ Parse a yaml configuration string """
@@ -231,23 +237,6 @@ class Config (object):
             return (next_config, None)
     
 
-class FilterLog (object):
-
-    def __init__ (self, show):
-        self._show = show
-        self.summary = dict()
-
-    def filter (self, typ, reason, row):
-        if typ in self.summary:
-            self.summary[typ] += 1
-        else:
-            self.summary[typ] = 1
-
-        if self._show:
-            #print(reason, common.Time.time(row["time"]), row["price"], row["volume"], row["event"], row["qualifier"], row["acc_volume"])
-            pass
-
-
 class Process (object):
 
     @staticmethod
@@ -274,8 +263,6 @@ class Process (object):
                 del[name]
 
         configs = Config(params["config"])
-        include = FilterLog(False)
-        exclude = FilterLog(True)
 
         with data.get_reader(series) as reader:
             with data.get_writer(tags, 0, 0, create=True, append=False) as writer:
@@ -306,17 +293,25 @@ class Process (object):
                             row_copy = True
                         row["volume"] = last_row["volume"]
 
-                    if price_filter.filter(row, exclude): continue
-                    if volume_filter.filter(row, exclude): continue
+                    nanprice = price_filter.filter(row)
+                    if nanprice:
+                        writer.add_row(row + nanprice)
+                        continue 
+                    nanvolume = volume_filter.filter(row)
+                    if nanvolume:
+                        writer.add_row(row + nanvolume)
+                        continue
 
                     #TODO handle volume on next row
 
                     #print(common.Time.time(row["time"]), row["price"], row["volume"], row["event"], row["qualifier"], row["acc_volume"])
 
+                    filter_reason = None
                     write_row = False
+
                     # include on first match
                     for include_filter in config.include_filters:
-                        if include_filter.filter(row, include):
+                        if include_filter.filter(row) != None:
                             write_row = True
                             break
 
@@ -324,18 +319,17 @@ class Process (object):
                         # exclude on first match
                         write_row = True
                         for exclude_filter in config.exclude_filters:
-                            if exclude_filter.filter(row, exclude):
+                            filter_reason = exclude_filter.filter(row)
+                            if filter_reason:
                                 write_row = False
                                 break
 
                     if write_row:
-                        writer.add_row(row)
+                        writer.add_row(row, ("", ""))
                     else:
-                        #print("- ", common.Time.time(row["time"]), row["price"], row["volume"], row["event"], row["qualifier"], row["acc_volume"])
-                        pass #todo write filtered output
+                        writer.add_row(row, filter_reason)
 
                     last_row = Process.clone_row(row)
 
                 writer.save()
-                print(exclude.summary) 
 

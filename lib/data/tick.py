@@ -20,6 +20,8 @@ class TickDescription (IsDescription):
     volume          = Float64Col()
     qualifier       = StringCol(1000)
     acc_volume      = Float64Col()
+    filter_class    = StringCol(100)
+    filter_detail   = StringCol(1000)
 
 
 class TickEventEnum (object):
@@ -29,7 +31,6 @@ class TickEventEnum (object):
 
     def __init__ (self):
         self._forward = dict(trade=0, settle=100, openinterest=200)
-        #self._reverse = dict(0="trade", 100="settle", 200="openinterest")        
         self._reverse = dict()
         self._reverse[0] = "trade"
         self._reverse[100] = "settle"
@@ -72,9 +73,11 @@ class TickWriter (Writer):
         new_row["volume"] = row["volume"]
         new_row["qualifier"] = row["qualifier"]
         new_row["acc_volume"] = row["acc_volume"]
+        new_row["filter_class"] = row["filter_class"]
+        new_row["filter_detail"] = row["filter_detail"]
         new_row.append() 
 
-    def add (self, t, event, price, volume, qualifier, acc_volume, raw=False):
+    def add (self, t, event, price, volume, qualifier, acc_volume, filter_class="", filter_detail="", raw=False):
         """
         Add a value to the time series.
         """
@@ -88,6 +91,8 @@ class TickWriter (Writer):
         row['volume'] = volume
         row['qualifier'] = qualifier
         row['acc_volume'] = acc_volume
+        row['filter_class'] = filter_class
+        row['filter_detail'] = filter_detail
         row.append()
 
     def save (self):
