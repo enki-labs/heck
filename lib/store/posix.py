@@ -86,6 +86,7 @@ class StoreFile (store.StoreFile):
 
     def __enter__ (self):
         from lib import common
+        common.log.info("locking file (%s)" % (self._path))
         self._lock.acquire()
         common.log.info("locked file (%s)" % (self._path))
         if self._open_handle:     

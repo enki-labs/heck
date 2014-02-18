@@ -5,9 +5,11 @@ Global methods for data stores.
 
 import time
 import exception
+import math
+from tables import *
+from bisect import bisect_left
 from lib import common
 from lib import schema
-from tables import *
 
 
 def decode_tags (tag_ids):
@@ -114,6 +116,45 @@ class Reader (object):
         self._file = None
         self._table = None
 
+    def nearest (self, timet):
+        """
+        Find nearest index to a given time.
+        """
+        def next_index (low, high):
+            return math.floor(low+((high-low)/2)) 
+
+        def search_up (table, low, high, timet):
+            search = next_index(low, high)
+            searcht = table[search]["time"]
+            while (high - low) > 1 and searcht < timet:
+                low = search
+                search = next_index(low, high)
+                searcht = table[search]["time"]
+            if searcht == timet:
+                return (search, search)
+            else:
+                return (low, search)
+
+        def search_down (table, low, high, timet):
+            search = next_index(low, high)
+            searcht = table[search]["time"]
+            while (high - low) > 1 and searcht > timet:
+                high = search
+                search = next_index(low, high)
+                searcht = table[search]["time"]
+            if searcht == timet:
+                return (search, search)
+            else:
+                return (search, high)
+
+        low = 0
+        high = self._table.nrows
+        while low != high:
+            low,  high = search_up(self._table, low, high, timet)
+            if low != high:
+                low, high = search_down(self._table, low, high, timet)
+        return low
+
     def __enter__ (self):
         """
         Open file and return reader.
@@ -123,6 +164,16 @@ class Reader (object):
         self._table = self._file.root.data
         return self
 
+    def read_noindex (self, start=None, stop=None):
+        """
+        Read data from a sorted file.
+        """
+        if start == None and stop == None:
+            start = 0
+            stop = self._table.nrows
+
+        return self._table.iterrows(start=start, stop=stop, step=1)
+
     def read (self, start=None, stop=None):
         """
         Read data time ordered.
@@ -130,7 +181,7 @@ class Reader (object):
         if start == None and stop == None:
             start = 0
             stop = self._table.nrows
-        return self._table.read_sorted(self._table.cols.time, start=start, stop=stop, step=1)
+        return self._table.read_sorted(self._table.cols.time, start=start, stop=stop, step=1, checkCSI=True)
 
     def read_iter (self, start=None, stop=None):
         """

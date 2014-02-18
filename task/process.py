@@ -50,8 +50,11 @@ def generate ():
         except IntegrityError:
             pass
 
+    output = ""
     with schema.select("process") as select:
         for process_def in select.all():
+            if process_def.id != 7:
+                continue
             proc = process.get(process_def)
             for generated in proc.generate():
                 try:
@@ -59,12 +62,14 @@ def generate ():
                                       , schema.table.series.tags.contains(data.resolve_tags(generated["tags"], create=False))) as select2:
                         selected = select2.all()
                         if len(selected) > 0:
-                            if selected[0].last_modified < generated["last_modified"]:
+                            output += "%s < %s" % (selected[0].last_modified, generated["last_modified"])
+                            if selected[0].id != generated["depend"] and selected[0].last_modified < generated["last_modified"]:
                                 queue(proc.id, generated)
                         else:
                             queue(proc.id, generated)
                 except exception.MissingTagException:
                     queue(proc.id, generated)
+    return output
 
 
 @task (ignore_result=True)
@@ -94,14 +99,14 @@ def queue ():
                         break # queued dependencies
             if not blocked:
                 count += 1
-                if count > 200: break
+                #if count > 200: break
                 queued.status = "queued"
                 schema.save(queued)
                 run.delay(queued.tags)
 
 @task
 @fix_import_path
-def run (tags):
+def run (tags, task_id=None):
     """ Run process """
 
     import exception
@@ -113,11 +118,14 @@ def run (tags):
     import json
     from collections import OrderedDict
 
+    result = None
     queued = schema.select_one("process_queue", schema.table.process_queue.tags==tags)
     if queued:
         proc_def = schema.select_one("process", schema.table.process.id==queued.process)
         if proc_def:
             proc = process.get(proc_def)
-            proc.run(queued)
+            proc.set_celery(task_id, run.backend)
+            result = proc.run(queued)
         schema.delete(queued)
 
+    return result

@@ -6,10 +6,13 @@ from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
 import numpy as np
 import memcache
+from sqlalchemy import func
+from sqlalchemy import distinct
 
 from config import prod
 from lib import schema
 from lib import data
+from lib import common
 from lib.process import DataFrameWrapper
 from lib.data import spark
 
@@ -46,24 +49,66 @@ class Data (Resource):
  
     def render_GET (self, request):
         series = schema.table.series
+        print(request.args)
         with schema.select("series", series.id==int(request.args[b"id"][0].decode("utf-8"))) as select:
             with data.get_reader(select.all()[0]) as reader: 
                 rows = reader._table.nrows
                 from_index = max(0, int(request.args[b"start"][0].decode("utf-8"))) if b"start" in request.args else 0
                 to_index = min(int(request.args[b"end"][0].decode("utf-8")), rows) if b"end" in request.args else rows
-                ohlc = []
-                volume = []
-                for row in reader.read(start=from_index, stop=to_index):
-                    ohlc.append([float(row["time"]/1000000)
+                from_time = int(request.args[b"starttime"][0].decode("utf-8")) if b"starttime" in request.args else None
+                read_format = request.args[b"format"][0].decode("utf-8")
+                print(read_format, from_time)
+
+                if from_time:
+                    diff = to_index - from_index
+                    from_index = reader.nearest(from_time)
+                    print(common.Time.time(from_time), from_index)
+                    to_index = from_index + diff
+                    print("adjusted from", from_index, to_index)
+
+                if read_format == "ohlcv":
+                    ohlc = []
+                    volume = []
+                    for row in reader.read(start=from_index, stop=to_index):
+                        ohlc.append([float(row["time"]/1000000)
                           , handle_nan(row["open"])
                           , handle_nan(row["high"])
                           , handle_nan(row["low"])
                           , handle_nan(row["close"])
                           , handle_nan(row["volume"])])
-                    volume.append([float(row["time"]/1000000), handle_nan(row["volume"])])
-            request.setHeader(b'Content-Type', b'text/json')
-            request.write(json.dumps({"ohlc": ohlc, "volume": volume, "adj": [], "from": int(from_index), "to": int(to_index), "max": int(rows)}).encode())
-            return b""            
+                        volume.append([float(row["time"]/1000000), handle_nan(row["volume"])])
+                    request.setHeader(b'Content-Type', b'text/json')
+                    request.write(json.dumps({"ohlc": ohlc, "volume": volume, "adj": [], "from": int(from_index), "to": int(to_index), "max": int(rows)}).encode())
+                elif read_format == "tick":
+                    ticks = []
+                    filtered = None
+                    for row in reader.read_noindex(start=from_index, stop=to_index):
+                        if filtered == None:
+                            filtered = ("filter_class" in row.table.colnames)
+                        if filtered:
+                            ticks.append([float(row["time"]/1000000)
+                              , handle_nan(row["price"])
+                              , handle_nan(row["volume"])
+                              , handle_nan(row["event"])
+                              , row["qualifier"].decode("utf-8")
+                              , handle_nan(row["acc_volume"])
+                              , row["filter_class"].decode("utf-8")
+                              , row["filter_detail"].decode("utf-8")
+                              ])
+                        else:
+                            ticks.append([float(row["time"]/1000000)
+                              , handle_nan(row["price"])
+                              , handle_nan(row["volume"])
+                              , handle_nan(row["event"])
+                              , row["qualifier"].decode("utf-8")
+                              , handle_nan(row["acc_volume"])
+                              , ""
+                              , ""
+                              ])
+                    request.setHeader(b'Content-Type', b'text/json')
+                    request.write(json.dumps({"ticks": ticks, "from": int(from_index), "to": int(to_index), "max": int(rows)}).encode())
+        print("done")
+        return b""            
 
     def getChild (self, name, request):
         return self
@@ -127,6 +172,60 @@ class Find (Resource):
         request.write(json.dumps(series_list).encode())
         return b""
 
+
+class Summary (Resource):
+
+    isLeaf = True
+
+    def __init__ (self):
+        super().__init__()
+
+    def getChild (self, name, request):
+        return FourOhFour()
+
+    def render_GET (self, request):
+        series = schema.table.series
+        with schema.query("series", func.count(series.id), func.min(series.last_modified), func.max(series.last_modified)) as summary:
+            for row in summary.all():
+                result = dict(count=row[0], min=row[1], max=row[2])
+                request.setHeader(b'Content-Type', b'text/json')
+                request.write(json.dumps(result).encode())
+        return b""
+
+
+class Tag (Resource):
+
+    isLeaf = True
+
+    def __init__ (self):
+        super().__init__()
+
+    def getChild (self, name, request):
+        return FourOhFour()
+
+    def render_GET (self, request):
+        tag = schema.table.tag
+        if b"target" in request.args:
+            target = request.args[b"target"][0].decode("utf-8")
+            part = request.args[b"part"][0].decode("utf-8")
+            values = []
+            with schema.select("tag", tag.name==target, tag.value.like("%s%%" % (part))) as tag_values:
+                for tag_value in tag_values.all():
+                    values.append(tag_value.value)
+                result = dict(values=sorted(values))
+                request.setHeader(b'Content-Type', b'text/json')
+                request.write(json.dumps(result).encode())
+        else:
+            with schema.query("tag", distinct(tag.name)) as tag_names:
+                tags = []
+                for tag_name in tag_names.all():
+                    tags.append(tag_name[0])
+                result = dict(tags=sorted(tags))
+                request.setHeader(b'Content-Type', b'text/json')
+                request.write(json.dumps(result).encode())
+        return b""
+
+
 class Api (Resource):
 
     isLeaf = False
@@ -141,6 +240,10 @@ class Api (Resource):
             return Spark()
         elif name == b"data":
             return Data()
+        elif name == b"summary":
+            return Summary()
+        elif name == b"tag":
+            return Tag()
         return FourOhFour()
 
 class Index (Resource):

@@ -1,0 +1,112 @@
+<!doctype html>
+<html ng-app="tauApp">
+    <head>
+        <% include header %>
+        <style type="text/css">
+        .panel-header-plain a {
+        color: white;
+        margin-right: 5px;
+        }
+        </style>
+        
+        <script src="http://code.highcharts.com/stock/highstock.js" type="text/javascript"></script>
+        <script src="http://code.highcharts.com/stock/highcharts-more.js" type="text/javascript"></script>
+        <script src="http://code.highcharts.com/stock/modules/exporting.js" type="text/javascript"></script>
+
+        <script src="js/datetime.js"></script>
+        <script src="js/data-view.js"></script>
+        <script type="text/javascript" src="js/ng-tags-input.js"></script>
+        <link rel="stylesheet" type="text/css" href="css/ng-tags-input.min.css"></link>
+    </head>
+    <body>
+        <% include mainnav %>
+
+        <div class="container-fluid" style="height: 100%;">
+            <div class="row-fluid">    
+                <div class="col-md-2">
+                    <div class="panel" ng-controller="SeriesSummary">
+                        <div class="panel-header">Summary</div>
+                        <div class="panel-inner">
+                            <ul class="nav nav-pills nav-stacked">
+                                <li class="active"><a href="#"><span class="badge pull-right">{{series.count}}</span>Series Count</a></li>
+                                <li class="active"><a href="#"><span class="badge pull-right">{{series.first}}</span>Earliest</a></li>
+                                <li class="active"><a href="#"><span class="badge pull-right">{{series.last}}</span>Latest</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="panel" ng-controller="SeriesSearch">
+                        <div class="panel-header">Search</div>
+                        <div class="panel-inner">
+                            <tags-input ng-model="tags" 
+                                        custom-class="tag-search"
+                                        placeholder="Add search tags...">
+                                <auto-complete source="tag_autocomplete($query)" 
+                                               source_value="tag_autocomplete($query)" 
+                                               min-length=1>
+                                </auto-complete>
+                            </tags-input>
+                            <div class="button-space">
+                                <a class="btn btn-primary btn-xs btn-pull-right" href="#" ng-click="search()">
+                                    <i class="fa fa-search icon-white"></i> Search</a>
+                            </div>
+                            <div class="search-list">
+                                <div class="search-result" ng-repeat="result in search_result" 
+                                                           ng-class="result.ng_selected ? 'search-result-selected' : 'not-selected'" 
+                                                           ng-mouseenter="highlight(result,true)" 
+                                                           ng-mouseleave="highlight(result, false)" 
+                                                           ng-dblclick="view(result)">
+                                    <span class="label label-primary search-result-label" ng-repeat="(name, value) in result.tags">{{name}}:{{value}}</span> 
+                                    <img class="search-result-spark" src="/api/spark?width=3.0&height=0.4&id={{result.id}}" alt="sparkline" />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-md-10" ng-controller="SeriesViews">
+                    <div class="panel" ng-repeat="instance in series" ng-controller="SeriesView">
+                        <div class="panel-header-plain">
+                            <span class="label label-primary search-result-label" ng-repeat="(name, value) in instance.tags">{{name}}:{{value}}</span>
+                            ID ({{instance.id}})
+                            <a href="#" class="pull-right"><i class="fa fa-times-circle icon-white"> close</i></a>
+                        </div>
+                        <div class="panel-control">
+                            <div id="plot-buttons" class="input-append">
+                                <button class="btn btn-primary btn-xs" type="button" id="plot-left-zero"><i class="fa fa-fast-backward icon-white"></i></button>
+                                <button class="btn btn-primary btn-xs" type="button" id="plot-left"><i class="fa fa-backward icon-white"></i></button>
+                                <div class="input-group">
+                                    <span class="input-group-addon">
+                                    <i class="fa fa-resize-horizontal icon-white"></i> window
+                                    </span><input style="width: 60px;" id="plot-count" type="text" value="1000" text="1000">
+                                </div>
+                                <button class="btn btn-primary btn-xs" type="button" id="plot-right"><i class="fa fa-forward icon-white"></i></button>
+                                <button class="btn btn-primary btn-xs" type="button" id="plot-right-zero"><i class="fa fa-fast-forward icon-white"></i></button>
+                                <button class="btn btn-primary btn-xs" type="button" id="plot-unzoom"><i class="fa fa-search-minus icon-white"></i></button>
+                                <button class="btn btn-primary btn-xs" type="button" id="view-switch"><i class="fa fa-eye icon-white"></i></button>
+                                <div class="input-group">
+                                    <span class="input-group-addon">
+                                    <i class="fa fa-calendar icon-white"></i> date
+                                    </span><input style="width: 90px;" id="plot-count" type="text" value="1000" text="1000">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="panel-inner">
+                            <!--<div id="plot_{{instance.id}}" style="width: 100%; height: 700px;"></div>-->
+                            <stock series="instance" 
+                                   handler="handler"
+                                   type="line"
+                                   height="400"
+                                   zoomtype="x"
+                                   >
+                            </stock>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <% include script %>
+
+        <% include footer %>
+    </body>
+</html>

@@ -54,6 +54,12 @@ class SessionWrapper (object):
         self._session.close()
 
 
+def query (table_name, *criterion):
+    """ Run a complex query """
+    session = session_factory()
+    query = session.query(*criterion)
+    return SessionWrapper(session, query)
+
 def select (table_name, *criterion):
     """ Select one or more elements from a table """
     session = session_factory()

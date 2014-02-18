@@ -9,6 +9,8 @@ import numpy as np
 from lib import common
 from lib import data
 from lib.data import tick
+from lib.process import ProcessBase
+from lib import schema
 
 
 class EventFilter (object):
@@ -97,11 +99,10 @@ class QualifierFilter (object):
         self._match = re.compile(match)
         self._match_string = match
 
-    def filter (self, row, log):
+    def filter (self, row):
         if self._match.match(row["qualifier"].decode("utf-8")):
-            log.filter("Qualifier", "%s" % (self._match_string))
-            return True
-        else: return False
+            return ("qualifier", "%s" % (self._match_string))
+        else: return None
 
 class FloorFilter (object):
     """ Filter based on a lower boundary """
@@ -237,11 +238,20 @@ class Config (object):
             return (next_config, None)
     
 
-class Process (object):
+class Process (ProcessBase):
 
-    @staticmethod
-    def parameters ():
+
+    def __init__ (self, process_def):
+        super().__init__(process_def)
+
+
+    def parameters (self):
         return dict(config="string")
+
+
+    def generate (self):
+        return self._generate_multi()
+
 
     @staticmethod
     def clone_row (row):
@@ -252,17 +262,19 @@ class Process (object):
                    , qualifier=row["qualifier"]
                    , acc_volume=row["acc_volume"])
 
-    @staticmethod
-    def run (series, params, output):
 
+
+    def run (self, queued):
+        series = schema.select_one("series", schema.table.series.id==queued.depend[0])
         tags = data.decode_tags(series.tags)
-        for name, value in output["add"].items():
+        for name, value in self._add.items():
             tags[name] = value
-        for name, value in output["remove"].items():
+        for name, value in self._remove.items():
             if name in tags:
-                del[name]
+                del tags[name]
 
-        configs = Config(params["config"])
+        #configs = Config(self._config)
+        configs = Config(self.get_config(tags))
 
         with data.get_reader(series) as reader:
             with data.get_writer(tags, 0, 0, create=True, append=False) as writer:
@@ -272,34 +284,38 @@ class Process (object):
                 price_filter = NanFilter("price")
                 volume_filter = NanFilter("volume")
                 last_row = None
+                row_current = 0
+                row_total = reader._table.nrows 
 
-                for row in reader._table: #TODO read_iter not working?
+                for raw_row in reader._table: #TODO read_iter not working?
 
-                    if not event_filter.filter(row, include): continue
-                    if last_row == None: last_row = Process.clone_row(row)
+                    row_current += 1
+                    if row_current % 100 == 0:
+                        self.progress(row_current, row_total)
+
+                    row = Process.clone_row(raw_row)
+                    if not event_filter.filter(row): continue
+                    if last_row == None: last_row = row
 
                     if next_config and row["time"] > next_config:
                         config, next_config = Config.get()
 
-                    row_copy = False 
                     if config.copy_last_price and np.isnan(row["price"]):
-                        if not row_copy:
-                            row = Process.clone_row(row)
-                            row_copy = True
                         row["price"] = last_row["price"]
                     if config.copy_last_volume and np.isnan(row["volume"]):
-                        if not row_copy:
-                            row = Process.clone_row(row)
-                            row_copy = True
                         row["volume"] = last_row["volume"]
 
                     nanprice = price_filter.filter(row)
                     if nanprice:
-                        writer.add_row(row + nanprice)
+                        row["filter_class"] = nanprice[0]
+                        row["filter_detail"] = nanprice[1]
+                        writer.add_row(row)
                         continue 
                     nanvolume = volume_filter.filter(row)
                     if nanvolume:
-                        writer.add_row(row + nanvolume)
+                        row["filter_class"] = nanvolume[0]    
+                        row["filter_detail"] = nanvolume[1]
+                        writer.add_row(row)
                         continue
 
                     #TODO handle volume on next row
@@ -325,11 +341,16 @@ class Process (object):
                                 break
 
                     if write_row:
-                        writer.add_row(row, ("", ""))
+                        row["filter_class"] = ""
+                        row["filter_detail"] = ""
+                        writer.add_row(row)
                     else:
-                        writer.add_row(row, filter_reason)
+                        row["filter_class"] = filter_reason[0]    
+                        row["filter_detail"] = filter_reason[1]
+                        writer.add_row(row)
 
-                    last_row = Process.clone_row(row)
+                    last_row = row
 
                 writer.save()
+                return "% rows processed" % (row_total)
 
