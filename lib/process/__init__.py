@@ -20,10 +20,14 @@ class DataFrameWrapper (object):
     Opens a data series and reads into a dataframe.
     """
 
-    def __init__ (self, series):
+    def __init__ (self, series, no_index=False, resolution=0):
         self.series = series
         with data.get_reader(series) as reader:
-            datatable = reader.read()
+            step = 1
+            if resolution > 0 and reader._table.nrows > resolution:
+                step = int(reader._table.nrows / resolution)
+            
+            datatable = reader.read(step=step, no_index=no_index)
             self.dframe = pd.DataFrame.from_records(
                          datatable 
                        , index=pd.DatetimeIndex(

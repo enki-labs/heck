@@ -19,18 +19,22 @@ tauApp.controller("SeriesViews", function ($scope, $http) {
     });
 });
 
-tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout) {
+tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $q) {
 
     $scope.state = {
-        current: 0,
-        max: 1000,
         view: "plot",
+        current: 0,
         window: 1000,
         shadow_window: 1000,
         date: 0,
         shadow_date: 0,
         refresh: false,
-        data: []
+        data: null,
+        summary: null
+    };
+
+    $scope.refresh = function () {
+        $scope.state.refresh = true;
     };
 
     $scope.closeView = function ($index) {
@@ -39,17 +43,17 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout) {
 
     $scope.start = function () {
         $scope.state.current = 0;
-        $scope.state.refresh = true;
+        $scope.refresh();
     };
 
     $scope.end = function () {
-        $scope.state.current = Math.max(0, ($scope.state.max - $scope.state.window));
-        $scope.state.refresh = true;
+        $scope.state.current = Math.max(0, ($scope.state.summary.imax - $scope.state.window));
+        $scope.refresh();
     };
 
     $scope.move = function (direction) {
-        $scope.state.current = Math.max(0, Math.min(($scope.state.current + (direction * $scope.state.window)), $scope.state.max));
-        $scope.state.refresh = true;
+        $scope.state.current = Math.max(0, Math.min(($scope.state.current + (direction * $scope.state.window)), $scope.state.summary.imax));
+        $scope.refresh();
     };
 
     $scope.unzoom = function () {
@@ -68,7 +72,7 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout) {
             if ($scope.state.window != $scope.state.shadow_window)
             {
                 $scope.state.shadow_window = $scope.state.window;
-                $scope.state.refresh = true;
+                $scope.refresh();
             }
             }, 500);
     });
@@ -77,174 +81,184 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout) {
         console.log("date changed " + $scope.state.date);
     };
 
-    $scope.plotOhlc = function (renderTarget, attrs, series, updateFunction) {
+    $scope.$watch("state.refresh", function () {
+        if (!$scope.state.refresh) return;
+        $scope.state.refresh = false;
 
-        var params = { params: { id: $scope.instance.id,
+        var format = $scope.instance.tags.format;
+        if (format == "ohlc") { format = "ohlcv"; }
+
+        if ($scope.state.summary == null)
+        {
+            var params = {params: { id: $scope.instance.id,
+                                    format: format,
+                                    resolution: 2000 
+                                  }
+                         };
+            $http.get("/api/summary", params).success( function (data) {
+                $scope.state.summary = data;
+                $scope.state.refresh = true;
+            });
+        }
+        else
+        {
+            var params = { params: { id: $scope.instance.id,
                                  start: $scope.state.current,
-                                 end: Math.min($scope.state.max, ($scope.state.current + $scope.state.window)),
-                                 format: "ohlcv"
+                                 end: Math.min($scope.state.summary.imax, ($scope.state.current + $scope.state.window)),
+                                 format: format
                                }
                      };
+            $http.get("/api/data", params).success( function (data) {
+                $scope.state.data = data;
+            });
+        }
+    });
 
-        $http.get("/api/data", params).success( function (data) {
-            console.log(data.ohlc);
-            $scope.state.data = data.ohlc;
-            $scope.state.max = data.max;
-            
-            var options = {
-                credits: { enabled: false },
-                chart: {
-                    renderTo: renderTarget,
-                    type: "ohlc",
-                    height: attrs.height || null,
-                    width: attrs.width || null,
-                    zoomType: "x"
-                },
-                navigator : {
-                    adaptToUpdatedData: false,
-                    series: {
-                                dataGrouping: { enabled: false },
-                                data: data.summary
-                            }
-                },
-                rangeSelector : {
-                    selected: 1,
-                    enabled: false
-                },
-                title: {
-                    text: attrs.title || null
-                },
-                tooltip: {
-                    valueDecimals: 6,
-                    xDateFormat: "%Y-%m-%d %H:%M:%S%L"
-                },
-                scrollbar : {
-                    enabled: false
-                },
-                series: [{  
-                             type: "ohlc",
-                             name: "",
-                             data : data.ohlc,
-                             dataGrouping : { enabled: false }
-                         },
-                         {  
-                             type: "column",
-                             name: "",
-                             data: data.volume,
-                             dataGrouping: {enabled: false},
-                             yAxis: 1
-                         }],
-                xAxis: {  
-                           events: {setExtremes: $scope.setZoom},
-                           minRange: 1,
-                           plotBands: []
-                       },
-                yAxis: [{  
-                            title: {text: "Price"},
-                            height: 300
-                        },
-                        {  
-                            title: {text: "Volume"},
-                            top: 300,
-                            height: 100,
-                            offset: 0
-                        }],
-                plotOptions: {  
-                                 ohlc: {turboThreshold: 10000},
-                                 series: {marker: {enabled: true}},
-                                 scatter: {tooltip: {pointFormat: "{point.name}"}}
-                             }
-            };//options
-            updateFunction(options);
-        });
+    $scope.plotOhlc = function (renderTarget, attrs, series, updateFunction) {
+
+        var options = {
+            credits: { enabled: false },
+            chart: {
+                renderTo: renderTarget,
+                type: "ohlc",
+                height: attrs.height || null,
+                width: attrs.width || null,
+                zoomType: "x"
+            },
+            navigator : {
+                adaptToUpdatedData: false,
+                series: {
+                    dataGrouping: { enabled: false },
+                    data: $scope.state.summary.summary
+                }
+            },
+            rangeSelector : {
+                selected: 1,
+                enabled: false
+            },
+            title: {
+                text: attrs.title || null
+            },
+            tooltip: {
+                valueDecimals: 6,
+                xDateFormat: "%Y-%m-%d %H:%M:%S%L"
+            },
+            scrollbar : {
+                enabled: false
+            },
+            series: [{  
+                type: "ohlc",
+                name: "Price",
+                data : $scope.state.data.data,
+                dataGrouping : { enabled: false }
+            },
+            {  
+                type: "column",
+                name: "Volume",
+                data: $scope.state.data.volume,
+                dataGrouping: {enabled: false},
+                yAxis: 1
+            }],
+            xAxis: {  
+                events: {setExtremes: $scope.setZoom},
+                minRange: 1,
+                plotBands: []
+            },
+            yAxis: [{  
+                title: {text: "Price"},
+                height: 300
+            },
+            {  
+                title: {text: "Volume"},
+                top: 300,
+                height: 100,
+                offset: 0
+            }],
+            plotOptions: {  
+                ohlc: {turboThreshold: 10000},
+                series: {marker: {enabled: true}},
+                scatter: {tooltip: {pointFormat: "{point.name}"}}
+            }
+        };//options
+        updateFunction(options);
     };
 
 
     $scope.plotTick = function (renderTarget, attrs, series, updateFunction) {
 
-        var params = { params: { id: $scope.instance.id,
-                                 start: $scope.state.current,
-                                 end: Math.min($scope.state.max, ($scope.state.current + $scope.state.window)),
-                                 format: "tick"
-                               }
-                     };
+        var indata = [];
 
-        $http.get("/api/data", params).success( function (data) {
-            $scope.state.data = data.ticks;
-            $scope.state.max = data.max;
-            var indata = [];
-            data.ticks.forEach(function (tick) {
-                if (tick[6] != "") {
-                    indata.push({x:tick[0], y:tick[1], marker: { radius: 2, fillColor: "red" }});
-                } else { indata.push({x:tick[0], y:tick[1], marker: { enabled: false }}); }
-            });
-
-            var options = {
-                credits: { enabled: false },
-                chart: {
-                    renderTo: renderTarget,
-                    type: "line",
-                    height: attrs.height || null,
-                    width: attrs.width || null,
-                    zoomType: "x"
-                },
-                navigator : {
-                    adaptToUpdatedData: false,
-                    series: { 
-                                dataGrouping: { enabled: false },
-                                data: data.summary
-                            }
-                },
-                rangeSelector : {
-                    selected: 1,
-                    enabled: false
-                },
-                title: {
-                    text: attrs.title || null
-                },
-                tooltip: {
-                    valueDecimals: 6,
-                    xDateFormat: "%Y-%m-%d %H:%M:%S%L"
-                },
-                scrollbar : {
-                    enabled: false
-                },
-                series: [{
-                             type: "line",
-                             name: "",
-                             data : indata,
-                             dataGrouping : { enabled: false }
-                         },
-                         {  
-                             type: "column",
-                             name: "",
-                             data: data.volume,
-                             dataGrouping: {enabled: false},
-                             yAxis: 1
-                         }],
-                xAxis: {
-                           events: {setExtremes: $scope.setZoom}, 
-                           minRange: 1, 
-                           plotBands: []
-                       },
-                yAxis: [{
-                            title: {text: "Price"}, 
-                            height: 400
-                        }, 
-                        {
-                            title: {text: "Volume"}, 
-                            top: 400, 
-                            height: 100, 
-                            offset: 0
-                        }],
-                plotOptions: {
-                                 line: { turboThreshold: 10000 },
-                                 series: {marker: {enabled: true}}, 
-                                 scatter: {tooltip: {pointFormat: "{point.name}"}}
-                             } 
-            };//options
-            updateFunction(options);             
+        $scope.state.data.data.forEach(function (tick) {
+            if (tick[6] != "") {
+                indata.push({x:tick[0], y:tick[1], marker: { radius: 2, fillColor: "red" }});
+            } else { indata.push({x:tick[0], y:tick[1], marker: { enabled: false }}); }
         });
+
+        var options = {
+            credits: { enabled: false },
+            chart: {
+                renderTo: renderTarget,
+                type: "line",
+                height: attrs.height || null,
+                width: attrs.width || null,
+                zoomType: "x"
+            },
+            navigator : {
+                adaptToUpdatedData: false,
+                series: { 
+                    dataGrouping: { enabled: false },
+                    data: $scope.state.summary.summary
+                }
+            },
+            rangeSelector : {
+                selected: 1,
+                enabled: false
+            },
+            title: {
+                text: attrs.title || null
+            },
+            tooltip: {
+                valueDecimals: 6,
+                xDateFormat: "%Y-%m-%d %H:%M:%S%L"
+            },
+            scrollbar : {
+                enabled: false
+            },
+            series: [{
+                type: "line",
+                name: "Price",
+                data : indata,
+                dataGrouping : { enabled: false }
+            },
+            {  
+                type: "column",
+                name: "Volume",
+                data: $scope.state.data.volume,
+                dataGrouping: {enabled: false},
+                yAxis: 1
+            }],
+            xAxis: {
+                events: {setExtremes: $scope.setZoom}, 
+                minRange: 1, 
+                plotBands: []
+            },
+            yAxis: [{
+                title: {text: "Price"}, 
+                height: 300
+            }, 
+            {
+                title: {text: "Volume"}, 
+                top: 300, 
+                height: 100, 
+                offset: 0
+            }],
+            plotOptions: {
+                line: { turboThreshold: 10000 },
+                series: {marker: {enabled: true}}, 
+                scatter: {tooltip: {pointFormat: "{point.name}"}}
+            } 
+        };//options
+        updateFunction(options);             
     };
     
     $scope.plotHandler = function (renderTarget, attrs, series, updateFunction) {
@@ -261,7 +275,7 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout) {
     $scope.gridHandler = function (series) { //(renderTarget, attrs, series, updateFunction) {
         if (series.tags.format == "tick")
         {
-            return { data: "state.data", 
+            return { data: "state.data.data", 
                      enableSorting: false,
                      enableColumnResize: true,
                      rowHeight: 20,
@@ -278,7 +292,7 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout) {
         }
         else
         {
-            return { data: "state.data",
+            return { data: "state.data.data",
                      enableSorting: false,
                      enableColumnResize: true,
                      rowHeight: 20,
@@ -293,6 +307,39 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout) {
         }
     };
 
+    $scope.refresh();
+
+});
+
+tauApp.controller("DataProcess", function ($scope) {
+
+    $scope.view = null;
+
+    $scope.show = function (view) {
+        $scope.view = view;
+    };
+
+});
+
+tauApp.controller("TaskActive", function ($scope, $http) {
+    var params = { params: { action: "active" } };
+    $http.get("api/task", params).success(function(data) {
+        $scope.active = data;
+    });
+});
+
+tauApp.controller("TaskConfiguration", function ($scope, $http) {
+    var params = { params: { action: "list", item: "config" } };
+    $http.get("api/task", params).success(function(data) {
+        $scope.items = data;
+    });
+});
+
+tauApp.controller("TaskProcess", function ($scope, $http) {
+    var params = { params: { action: "list", item: "process" } };
+    $http.get("api/task", params).success(function(data) {
+        $scope.items = data;
+    });
 });
 
 tauApp.controller("SeriesSearch", function ($rootScope, $scope, $http, $q) {
@@ -303,7 +350,6 @@ tauApp.controller("SeriesSearch", function ($rootScope, $scope, $http, $q) {
             var tagParts = fullTag.split(":");
             tagSearch[tagParts[0]] = tagParts[1];
         });
-        console.log(tagSearch);
         $http.get("/api/find", {params: {tags: JSON.stringify(tagSearch)}}).success( function(data) {
             $scope.search_result = data;
         });
@@ -362,11 +408,33 @@ tauApp.directive('stock', function () {
 
                 scope.handler(element[0], attrs, scope.series, function (options) {
                     var chart = new Highcharts.StockChart(options);
-                    scope.watcher = false;
                 });                
             });
+        }
+    };
+});
 
-            scope.watcher = true;
+tauApp.directive('spark', function () {
+    return {
+        restrict: 'ECMA',
+        template: '<img class="search-result-spark" ng-src="/api/spark?width={{sparkwidth}}&height={{sparkheight}}&id={{series.id}}&format={{format}}&resolution={{resolution}}" alt="sparkline" />',
+        scope: {
+            series: '=',
+            sparkwidth: '@',
+            sparkheight: '@',
+            resolution: '@'            
+        },
+        transclude: false,
+        replace: true,
+
+        link: function (scope, element, attrs) {
+            scope.$watch("series", function (newval) {
+                if (typeof scope.format === "undefined")
+                {
+                    if (scope.series.tags.format == "ohlc") scope.format = "ohlcv";
+                    else scope.format = scope.series.tags.format;
+                }
+            });        
         }
     };
 });

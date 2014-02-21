@@ -1,4 +1,5 @@
 
+import argparse
 import json
 from twisted.internet import reactor
 from twisted.web.server import Site
@@ -50,6 +51,9 @@ class Data (Resource):
     def render_GET (self, request):
         series = schema.table.series
         print(request.args)
+
+        response = dict(data=[], volume=[], adj=[], tstart=0, tend=0, istart=0, iend=0)
+
         with schema.select("series", series.id==int(request.args[b"id"][0].decode("utf-8"))) as select:
             with data.get_reader(select.all()[0]) as reader: 
                 rows = reader._table.nrows
@@ -67,26 +71,28 @@ class Data (Resource):
                     print("adjusted from", from_index, to_index)
 
                 if read_format == "ohlcv":
-                    ohlc = []
-                    volume = []
                     for row in reader.read(start=from_index, stop=to_index):
-                        ohlc.append([float(row["time"]/1000000)
+                        response["data"].append([float(row["time"]/1000000)
                           , handle_nan(row["open"])
                           , handle_nan(row["high"])
                           , handle_nan(row["low"])
                           , handle_nan(row["close"])
                           , handle_nan(row["volume"])])
-                        volume.append([float(row["time"]/1000000), handle_nan(row["volume"])])
-                    request.setHeader(b'Content-Type', b'text/json')
-                    request.write(json.dumps({"ohlc": ohlc, "volume": volume, "adj": [], "from": int(from_index), "to": int(to_index), "max": int(rows)}).encode())
+                        response["volume"].append([float(row["time"]/1000000), handle_nan(row["volume"])])
+
+                    if len(response["data"]) > 0:
+                        response["tstart"] = response["data"][0][0]
+                        response["tend"] = response["data"][-1][0] 
+                        response["istart"] = int(from_index)
+                        response["iend"] = int(to_index)
+ 
                 elif read_format == "tick":
-                    ticks = []
                     filtered = None
                     for row in reader.read_noindex(start=from_index, stop=to_index):
                         if filtered == None:
                             filtered = ("filter_class" in row.table.colnames)
                         if filtered:
-                            ticks.append([float(row["time"]/1000000)
+                            response["data"].append([float(row["time"]/1000000)
                               , handle_nan(row["price"])
                               , handle_nan(row["volume"])
                               , handle_nan(row["event"])
@@ -96,7 +102,7 @@ class Data (Resource):
                               , row["filter_detail"].decode("utf-8")
                               ])
                         else:
-                            ticks.append([float(row["time"]/1000000)
+                            response["data"].append([float(row["time"]/1000000)
                               , handle_nan(row["price"])
                               , handle_nan(row["volume"])
                               , handle_nan(row["event"])
@@ -105,8 +111,15 @@ class Data (Resource):
                               , ""
                               , ""
                               ])
-                    request.setHeader(b'Content-Type', b'text/json')
-                    request.write(json.dumps({"ticks": ticks, "from": int(from_index), "to": int(to_index), "max": int(rows)}).encode())
+                        response["volume"].append([float(row["time"]/1000000), handle_nan(row["volume"])])
+                    if len(response["data"]) > 0:
+                        response["tstart"] = response["data"][0][0]
+                        response["tend"] = response["data"][-1][0]
+                        response["istart"] = int(from_index)
+                        response["iend"] = int(to_index)
+            
+        request.setHeader(b'Content-Type', b'text/json')
+        request.write(json.dumps(response).encode())
         print("done")
         return b""            
 
@@ -127,26 +140,41 @@ class Spark (Resource):
     def render_GET (self, request):
         params = {"id": int(request.args[b"id"][0].decode("utf-8")),
                   "width": request.args[b"width"][0].decode("utf-8"),
-                  "height": request.args[b"height"][0].decode("utf-8")}
+                  "height": request.args[b"height"][0].decode("utf-8"),
+                  "format": request.args[b"format"][0].decode("utf-8"),
+                  "resolution": int(request.args[b"resolution"][0].decode("utf-8"))
+                 }
+
         series = schema.table.series
         with schema.select("series", series.id==params["id"]) as select:
             for s in select.all():
 
-                cache_id = "spark_%s_%s_%s" % (params["id"], params["width"], params["height"])
+                cache_id = "spark_%s_%s_%s_%s_%s" % (params["id"], params["width"], params["height"], params["format"], params["resolution"])
                 cached = memcache.get(cache_id)
                 request.setHeader(b'Content-Type', b'image/png')
                 if cached and cached["lm"] == s.last_modified:
                     request.write(cached["res"])
                 else:
-                    data = DataFrameWrapper(s)
-                    plot = spark.Spark.plot(data=data.dframe["close"]
-                            , volume=data.dframe["volume"]
-                            , enable_volume=True
-                            , width=float(request.args[b"width"][0])
-                            , height=float(request.args[b"height"][0]))
-                    cached = {"lm": s.last_modified, "res": plot.getvalue()}
-                    memcache.set(cache_id, cached)
-                    request.write(cached["res"])
+                    if params["format"] == "ohlcv":
+                        data = DataFrameWrapper(s, resolution=params["resolution"])
+                        plot = spark.Spark.plot(data=data.dframe["close"]
+                                , volume=data.dframe["volume"]
+                                , enable_volume=True
+                                , width=float(request.args[b"width"][0])
+                                , height=float(request.args[b"height"][0]))
+                        cached = {"lm": s.last_modified, "res": plot.getvalue()}
+                        memcache.set(cache_id, cached)
+                        request.write(cached["res"])
+                    elif params["format"] == "tick":
+                        data = DataFrameWrapper(s, no_index=True, resolution=params["resolution"])
+                        plot = spark.Spark.plot(data=data.dframe["price"]
+                                , volume=0
+                                , enable_volume=True
+                                , width=float(request.args[b"width"][0])
+                                , height=float(request.args[b"height"][0]))
+                        cached = {"lm": s.last_modified, "res": plot.getvalue()}
+                        memcache.set(cache_id, cached)
+                        request.write(cached["res"])
                 return b""
 
  
@@ -184,12 +212,53 @@ class Summary (Resource):
         return FourOhFour()
 
     def render_GET (self, request):
+
         series = schema.table.series
-        with schema.query("series", func.count(series.id), func.min(series.last_modified), func.max(series.last_modified)) as summary:
-            for row in summary.all():
-                result = dict(count=row[0], min=row[1], max=row[2])
-                request.setHeader(b'Content-Type', b'text/json')
-                request.write(json.dumps(result).encode())
+
+        if b"id" in request.args:
+            response = dict(summary=[], tzero=0, tmax=0, imax=0)
+
+            with schema.select("series", series.id==int(request.args[b"id"][0].decode("utf-8"))) as select:
+                with data.get_reader(select.all()[0]) as reader:
+                    rows = reader._table.nrows
+                    read_format = request.args[b"format"][0].decode("utf-8")
+                    resolution = int(request.args[b"resolution"][0].decode("utf-8"))
+
+                    from_index = 0
+                    to_index = rows
+                    step = 1
+                    if to_index > resolution:
+                        step = int(to_index / resolution)
+
+                    if read_format == "ohlcv":
+                        for row in reader.read(start=from_index, stop=to_index, step=step):
+                            response["summary"].append([float(row["time"]/1000000)
+                                , handle_nan(row["open"])])
+                        if rows > 0:
+                            for row in reader.read(start=0, stop=1):
+                                response["tzero"] = float(row["time"]/1000000)
+                            for row in reader.read(start=rows-1, stop=rows):
+                                response["tmax"] = float(row["time"]/1000000)
+                    elif read_format == "tick":
+                        for row in reader.read_noindex(start=from_index, stop=to_index, step=step):
+                            response["summary"].append([float(row["time"]/1000000)
+                                , handle_nan(row["price"])])
+                        if rows > 0:
+                            for row in reader.read_noindex(start=0, stop=1):
+                                response["tzero"] = float(row["time"]/1000000)
+                            for row in reader.read_noindex(start=rows-1, stop=rows):
+                                response["tmax"] = float(row["time"]/1000000)
+
+                    response["imax"] = int(rows)
+                    request.setHeader(b'Content-Type', b'text/json')
+                    request.write(json.dumps(response).encode())
+
+        else:
+            with schema.query("series", func.count(series.id), func.min(series.last_modified), func.max(series.last_modified)) as summary:
+                for row in summary.all():
+                    result = dict(count=row[0], min=row[1], max=row[2])
+                    request.setHeader(b'Content-Type', b'text/json')
+                    request.write(json.dumps(result).encode())
         return b""
 
 
@@ -226,12 +295,56 @@ class Tag (Resource):
         return b""
 
 
+class Task (Resource):
+
+    isLeaf = True
+
+    def __init__ (self, args):
+        super().__init__()
+        import celery
+        self._celery = celery.Celery()
+        config = {"BROKER_URL": args.celery_broker,
+                  "CELERY_RESULT_BACKEND": args.celery_backend,
+                  "CELERY_RESULT_DB_TABLENAMES": args.celery_tables}
+        self._celery.config_from_object(config)
+
+    def getChild (self, name, request):
+        return FourOhFour()
+
+    def render_GET (self, request):
+
+        action = request.args[b"action"][0].decode("utf-8")
+        result = {}
+        
+        if action == "active":        
+            result = self._celery.control.inspect().active()
+        if action == "list":
+            item = request.args[b"item"][0].decode("utf-8")
+            if item in ["config", "process"]:
+                result = []
+                with schema.select(item) as items:
+                    for row in items.all():
+                        result.append(row.to_dict())
+        elif action == "progress":
+            result["task"] = []
+            #TODO does the Celery API support listing tasks in DB backend?
+            with schema.query("celery_task", "task_id") as tasks:
+                for task in tasks.from_statement("select task_id from celery_task").all():
+                    task_info = self._celery.backend.get_task_meta(task[0])
+                    task_info["date_done"] = common.Time.tick(task_info["date_done"])
+                    result["task"].append(task_info)
+        
+        request.setHeader(b'Content-Type', b'text/json')
+        request.write(json.dumps(result).encode())
+        return b""
+
 class Api (Resource):
 
     isLeaf = False
 
-    def __init__ (self):
+    def __init__ (self, args):
         super().__init__()
+        self._args = args
 
     def getChild (self, name, request):
         if name == b"find":
@@ -244,18 +357,21 @@ class Api (Resource):
             return Summary()
         elif name == b"tag":
             return Tag()
+        elif name == b"task":
+            return Task(args)
         return FourOhFour()
 
 class Index (Resource):
 
     isLeaf = False
 
-    def __init__ (self):
+    def __init__ (self, args):
         super().__init__()
+        self._args = args
 
     def getChild (self, name, request):
         if name == b"api":
-            return Api()
+            return Api(self._args)
         return FourOhFour()
 
     def render_GET (self, request):
@@ -276,8 +392,15 @@ class FourOhFour (Resource):
         request.finish()
         return NOT_DONE_YET
 
-res = Index()
+parser = argparse.ArgumentParser(description="REST API")
+parser.add_argument("--port", type=int, help="API port (eg: 3010)", required=True)
+parser.add_argument("--celery_broker", help="Celery broker URL (eg: amqp://celery:pass@localhost:5672/task)", required=True)
+parser.add_argument("--celery_backend", help="Celery DB URL (eg: db+postgresql://heck:pass@localhost/heck)", required=True)
+parser.add_argument("--celery_tables", type=json.loads, help='Celery DB table names (eg: {"task": "celery_task", "group": "celery_group"})', required=True) 
+args = parser.parse_args()
+
+res = Index(args)
 factory = Site(res)
-reactor.listenTCP(3010, factory)
+reactor.listenTCP(args.port, factory)
 reactor.run()
 

@@ -38,5 +38,13 @@ def table (base):
             return "<process(id='%s', name='%s', processor='%s', search='%s', output='%s', last_modified='%s')>" % (
                    self.id, self.name, self.processor, self.search, self.output, self.last_modified)
 
+        def to_dict (self):
+            return {"id": self.id
+                   ,"name": self.name
+                   ,"processor": self.processor
+                   ,"search": self.search_dict._parse()
+                   ,"output": self.output_dict._parse()
+                   ,"last_modified": self.last_modified}
+
     return table_def
 

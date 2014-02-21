@@ -164,7 +164,7 @@ class Reader (object):
         self._table = self._file.root.data
         return self
 
-    def read_noindex (self, start=None, stop=None):
+    def read_noindex (self, start=None, stop=None, step=1):
         """
         Read data from a sorted file.
         """
@@ -172,25 +172,28 @@ class Reader (object):
             start = 0
             stop = self._table.nrows
 
-        return self._table.iterrows(start=start, stop=stop, step=1)
+        return self._table.iterrows(start=start, stop=stop, step=step)
 
-    def read (self, start=None, stop=None):
+    def read (self, start=None, stop=None, step=1, no_index=False):
         """
         Read data time ordered.
         """
         if start == None and stop == None:
             start = 0
             stop = self._table.nrows
-        return self._table.read_sorted(self._table.cols.time, start=start, stop=stop, step=1, checkCSI=True)
+        if no_index:
+            return self._table.read(start=start, stop=stop, step=step)
+        else:
+            return self._table.read_sorted(self._table.cols.time, start=start, stop=stop, step=step, checkCSI=True)
 
-    def read_iter (self, start=None, stop=None):
+    def read_iter (self, start=None, stop=None, step=1):
         """
         Read data time ordered using an iterator.
         """
         if start == None and stop == None:
             start = 0
             stop = self._table.nrows
-        return self._table.itersorted(self._table.cols.time, start=start, stop=stop, step=1)
+        return self._table.itersorted(self._table.cols.time, start=start, stop=stop, step=step)
 
     def __exit__ (self, typ, value, tb):
         """

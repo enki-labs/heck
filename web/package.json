@@ -7,6 +7,9 @@
         "express" : "*",
         "json2csv" : "*",
         "request" : "*",
-        "ejs" : "*"
+        "ejs" : "*",
+        "passport" : "*",
+        "passport-local" : "*",
+        "connect-ensure-login" : "*"
     }
 }
