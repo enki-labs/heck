@@ -74,7 +74,7 @@ tagsInput.directive('tagsInput', ["$timeout","$document","tagsInputConfig", func
         restrict: 'E',
         require: 'ngModel',
         scope: {
-            tags: '=ngModel',
+            tagModel: '=ngModel',
             onTagAdded: '&',
             onTagRemoved: '&'
         },
@@ -99,7 +99,8 @@ tagsInput.directive('tagsInput', ["$timeout","$document","tagsInputConfig", func
                 allowedTagsPattern: [RegExp, /^[a-zA-Z0-9\s\:]+$/],
                 enableEditingLastTag: [Boolean, false],
                 minTags: [Number],
-                maxTags: [Number]
+                maxTags: [Number],
+                save: [Object, null]
             });
 
             $scope.events = new SimplePubSub();
@@ -108,7 +109,19 @@ tagsInput.directive('tagsInput', ["$timeout","$document","tagsInputConfig", func
             $scope.events.on('tag-removed', $scope.onTagRemoved);
 
             $scope.newTag = '';
-            $scope.tags = $scope.tags || [];
+            $scope.tags = [];
+            if (typeof $scope.tagModel === "object")
+            {
+                Object.keys($scope.tagModel).forEach(function (key) {
+                    $scope.tags.push(key + ":" + $scope.tagModel[key]);
+                });
+            }
+            else
+            {
+                $scope.tagModel.forEach(function (item) {
+                    $scope.tags.push(item);
+                });
+            }
 
             $scope.tryAdd = function() {
                 var changed = false;
@@ -160,6 +173,23 @@ tagsInput.directive('tagsInput', ["$timeout","$document","tagsInputConfig", func
                 $scope.events.trigger('tag-removed', { $tag: removedTag });
                 return removedTag;
             };
+
+            $scope.save = function (ok) {
+                if (ok) {
+                    var newModel = {};
+                    $scope.tags.forEach(function (item) {
+                        var parts = item.split(":");
+                        newModel[parts[0]] = parts[1];
+                    });
+                   
+                    var missingKeys = $(Object.keys($scope.tagModel)).not(Object.keys(newModel)).get();
+                    missingKeys.forEach(function (key) {
+                        delete $scope.tagModel[key];
+                    });                    
+                    $.extend($scope.tagModel, newModel);
+                }
+                $scope.options.save($scope, ok);
+	    };
 
             $scope.getCssClass = function(index) {
                 var isLastTag = index === $scope.tags.length - 1;
@@ -583,10 +613,11 @@ tagsInput.provider('tagsInputConfig', function() {
 
     this.$get = ["$interpolate", function($interpolate) {
         var converters = {};
-        converters[String] = function(value) { return value; };
-        converters[Number] = function(value) { return parseInt(value, 10); };
-        converters[Boolean] = function(value) { return value.toLowerCase() === 'true'; };
-        converters[RegExp] = function(value) { return new RegExp(value); };
+        converters[String] = function(value, scope) { return value; };
+        converters[Number] = function(value, scope) { return parseInt(value, 10); };
+        converters[Boolean] = function(value, scope) { return value.toLowerCase() === 'true'; };
+        converters[RegExp] = function(value, scope) { return new RegExp(value); };
+        converters[Object] = function(value, scope) { return scope.$parent[value]; };
 
         return {
             load: function(directive, scope, attrs, options) {
@@ -600,7 +631,7 @@ tagsInput.provider('tagsInputConfig', function() {
                             return angular.isDefined(globalValue) ? globalValue : value[1];
                         };
 
-                    scope.options[key] = interpolatedValue ? converter(interpolatedValue) : getDefault(key);
+                    scope.options[key] = interpolatedValue ? converter(interpolatedValue, scope) : getDefault(key);
                 });
             }
         };
@@ -611,7 +642,7 @@ tagsInput.provider('tagsInputConfig', function() {
 /* HTML templates */
 tagsInput.run(["$templateCache", function($templateCache) {
     $templateCache.put('ngTagsInput/tags-input.html',
-    "<div class=\"ngTagsInput\" tabindex=\"-1\" ng-class=\"options.customClass\" ti-transclude-append=\"\"><div class=\"tags\" ng-class=\"{focused: hasFocus}\"><ul class=\"tag-list\"><li class=\"tag-item\" ng-repeat=\"tag in tags\" ng-class=\"getCssClass($index)\"><span>{{tag}}</span> <button type=\"button\" ng-click=\"remove($index)\">{{options.removeTagSymbol}}</button></li></ul><input class=\"tag-input\" placeholder=\"{{options.placeholder}}\" maxlength=\"{{options.maxLength}}\" tabindex=\"{{options.tabindex}}\" ng-model=\"newTag\" ng-change=\"newTagChange()\" ti-autosize=\"\"></div></div>"
+    "<div class=\"ngTagsInput\" tabindex=\"-1\" ng-class=\"options.customClass\" ti-transclude-append=\"\"><div class=\"tags\" ng-class=\"{focused: hasFocus}\"><ul class=\"tag-list\"><li class=\"tag-item\" ng-repeat=\"tag in tags\" ng-class=\"getCssClass($index)\"><span>{{tag}}</span> <button type=\"button\" ng-click=\"remove($index)\">{{options.removeTagSymbol}}</button></li></ul><input class=\"tag-input\" placeholder=\"{{options.placeholder}}\" maxlength=\"{{options.maxLength}}\" tabindex=\"{{options.tabindex}}\" ng-model=\"newTag\" ng-change=\"newTagChange()\" ti-autosize=\"\"><span class='pull-right' ng-if='options.save!=null'><a class='tag-save' ng-click='save(true)'><i class='fa fa-save'> save</i><a class='tag-save' ng-click='save(false)'><i class='fa fa-undo'> undo</i></a></span></div></div>"
   );
 
   $templateCache.put('ngTagsInput/auto-complete.html',

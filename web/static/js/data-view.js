@@ -1,5 +1,5 @@
 
-var tauApp = angular.module("tauApp", ["ngTagsInput", "ngGrid"]);
+var tauApp = angular.module("tauApp", ["ngSanitize", "ngTagsInput", "ngGrid", "JSONedit"]);
 
 tauApp.controller("SeriesSummary", function ($scope, $http) {
     $http.get("api/summary").success(function(data) {
@@ -329,10 +329,52 @@ tauApp.controller("TaskActive", function ($scope, $http) {
 });
 
 tauApp.controller("TaskConfiguration", function ($scope, $http) {
+    $scope.items = [];
+    $scope.showEditContent = false;
+    $scope.editcontent = null;
+    $scope.editentity = null;
+
     var params = { params: { action: "list", item: "config" } };
     $http.get("api/task", params).success(function(data) {
         $scope.items = data;
     });
+
+    $scope.editContent = function (row) {
+        $scope.editcontent = $.extend(true, {}, row.entity.content);
+        $scope.editentity = row.entity;
+        $scope.showEditContent = true;
+    };
+
+    $scope.saveTags = function (scope, ok) {
+        scope.$emit('ngGridEventEndCellEdit');
+    };
+
+    $scope.saveContent = function (scope, ok) {
+        if (ok) {
+            $scope.editentity.content = $scope.editcontent;
+        }
+        $scope.showEditContent = false;
+    };
+
+    $scope.gridHandler = function () {
+        return { data: "items",
+                 enableSorting: false,
+                 enableColumnResize: true,
+                 enableRowSelection: false,
+                 canSelectRows: false,
+                 rowHeight: 40,
+                 columnDefs: [{field: "tags", 
+                               displayName: "Tags", 
+                               cellTemplate: "<span class='label label-primary row-tag' ng-repeat='(name, value) in row.entity.tags'>{{name}}:{{value}}</span>",
+                               enableCellEdit: true,
+                               editableCellTemplate: "<tags-input ng-model='row.entity.tags' ng-input='row.entity.tags' save='saveTags' custom-class='tag-edit' placeholder='...'></tags-input>"
+                              }
+                             ,{field: "content",
+                               displayName: "Content",
+                               cellTemplate: "<span class='truncate small-text' ng-dblclick='editContent(row)'>{{row.entity.content}}</span>"}
+                             ]
+               };
+    };
 });
 
 tauApp.controller("TaskProcess", function ($scope, $http) {

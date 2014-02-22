@@ -1,6 +1,7 @@
 
 import argparse
 import json
+import yaml
 from twisted.internet import reactor
 from twisted.web.server import Site
 from twisted.web.resource import Resource
@@ -320,7 +321,15 @@ class Task (Resource):
             result = self._celery.control.inspect().active()
         if action == "list":
             item = request.args[b"item"][0].decode("utf-8")
-            if item in ["config", "process"]:
+            if item == "config":
+                result = []
+                with schema.select(item) as items:
+                    for row in items.all():
+                        rowdict = row.to_dict()
+                        rowdict["content"] = yaml.load(rowdict["content"])
+                        rowdict["tags"] = data.decode_tags(rowdict["tags"])
+                        result.append(rowdict)
+            elif item == "process":
                 result = []
                 with schema.select(item) as items:
                     for row in items.all():
