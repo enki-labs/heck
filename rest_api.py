@@ -319,11 +319,13 @@ class Task (Resource):
         
         if action == "active":        
             result = self._celery.control.inspect().active()
-        if action == "list":
+        elif action == "list":
             item = request.args[b"item"][0].decode("utf-8")
+            item_filter = json.loads(request.args[b"filter"][0].decode("utf-8"))
             if item == "config":
                 result = []
-                with schema.select(item) as items:
+                tags = data.resolve_tags(item_filter, create=False)
+                with schema.select("config", schema.table.config.tags.contains(tags)) as items:
                     for row in items.all():
                         rowdict = row.to_dict()
                         rowdict["content"] = yaml.load(rowdict["content"])
@@ -331,9 +333,59 @@ class Task (Resource):
                         result.append(rowdict)
             elif item == "process":
                 result = []
-                with schema.select(item) as items:
+                print(item_filter)
+                import sys
+                sys.stdout.flush()
+                with schema.select(item, schema.table.process.name.ilike("%%%s%%" % item_filter["name"]), 
+                                         schema.table.process.processor.ilike("%%%s%%" % item_filter["processor"])) as items:
                     for row in items.all():
                         result.append(row.to_dict())
+        elif action == "delete":
+            item = request.args[b"item"][0].decode("utf-8")
+            target = json.loads(request.args[b"target"][0].decode("utf-8"))
+            item_schema = None
+            if item == "config":
+                item_schema = schema.table.config
+            elif item == "process":
+                item_schema = schema.table.process
+            if item_schema:
+                ids = []
+                for target_item in target:
+                    ids.append(target_item["id"])
+                with schema.query(item, item_schema.id.in_(ids)) as del_query:
+                    del_query.delete()
+        elif action == "save":
+            item = request.args[b"item"][0].decode("utf-8")
+            target = json.loads(request.args[b"target"][0].decode("utf-8"))
+            if item == "config":
+                for target_item in target:
+                    target_item["tags"] = data.resolve_tags(target_item["tags"], create=True)
+                    target_item["content"] = yaml.dump(target_item["content"])
+                    target_item["last_modified"] = common.Time.tick()
+                    if target_item["id"]: #TODO how to upsert with SQLAlchemy if id set by init?
+                        get_item = schema.select_one("config", schema.table.config.id==target_item["id"])
+                        get_item.tags = target_item["tags"]
+                        get_item.content = target_item["content"]
+                        get_item.last_modified = target_item["last_modified"]
+                        schema.save(get_item)
+                    else:
+                        schema.save(schema.table.config.from_dict(target_item))
+            elif item == "process":
+                for target_item in target:
+                    target_item["last_modified"] = common.Time.tick()
+                    if target_item["id"]: #TODO how to upsert with SQLAlchemy if id set by init?
+                        get_item = schema.select_one("process", schema.table.process.id==target_item["id"])
+                        get_item.name = target_item["name"]
+                        get_item.processor = target_item["processor"]
+                        #TODO all tables should support json to/from
+                        get_item.search = json.dumps(target_item["search"])
+                        get_item.output = json.dumps(target_item["output"])
+                        get_item.last_modified = target_item["last_modified"]
+                        schema.save(get_item)
+                    else:
+                        schema.save(schema.table.process.from_dict(target_item))
+            #import sys
+            #sys.stdout.flush()
         elif action == "progress":
             result["task"] = []
             #TODO does the Celery API support listing tasks in DB backend?

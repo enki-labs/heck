@@ -110,6 +110,7 @@ tagsInput.directive('tagsInput', ["$timeout","$document","tagsInputConfig", func
 
             $scope.newTag = '';
             $scope.tags = [];
+            if ($scope.tagModel) {
             if (typeof $scope.tagModel === "object")
             {
                 Object.keys($scope.tagModel).forEach(function (key) {
@@ -121,6 +122,7 @@ tagsInput.directive('tagsInput', ["$timeout","$document","tagsInputConfig", func
                 $scope.tagModel.forEach(function (item) {
                     $scope.tags.push(item);
                 });
+            }
             }
 
             $scope.tryAdd = function() {
@@ -142,6 +144,10 @@ tagsInput.directive('tagsInput', ["$timeout","$document","tagsInputConfig", func
                     $scope.newTag = '';
                     $scope.events.trigger('input-change', '');
                     changed = true;
+                }
+
+                if (changed && !$scope.options.save) { 
+                    $scope.save(true); //update model automatically 
                 }
                 return changed;
             };
@@ -188,7 +194,7 @@ tagsInput.directive('tagsInput', ["$timeout","$document","tagsInputConfig", func
                     });                    
                     $.extend($scope.tagModel, newModel);
                 }
-                $scope.options.save($scope, ok);
+                if ($scope.options.save) { $scope.options.save($scope, ok); }
 	    };
 
             $scope.getCssClass = function(index) {

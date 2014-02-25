@@ -27,6 +27,14 @@ def table (base):
             return "<config(id='%s', tags='%s', last_modified='%s', content='%s')>" % (
                    self.id, self.tags, self.last_modified, self.content)
 
+        def from_dict (inst):
+            instance = table_def()
+            instance.id = inst["id"]
+            instance.tags = inst["tags"]
+            instance.last_modified = inst["last_modified"]
+            instance.content = inst["content"]
+            return instance
+
         def to_dict (self):
             return {"id": self.id
                    ,"tags": self.tags

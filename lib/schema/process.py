@@ -46,5 +46,15 @@ def table (base):
                    ,"output": self.output_dict._parse()
                    ,"last_modified": self.last_modified}
 
+        def from_dict (dictionary):
+            output = table_def()
+            output.id = dictionary["id"]
+            output.name = dictionary["name"]
+            output.processor = dictionary["processor"]
+            StringDictionaryWrapper(output, "search").encode(dictionary["search"])
+            StringDictionaryWrapper(output, "output").encode(dictionary["output"])
+            output.last_modified = dictionary["last_modified"]
+            return output
+
     return table_def
 

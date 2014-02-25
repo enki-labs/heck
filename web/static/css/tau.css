@@ -209,6 +209,27 @@
     color: rgba(42,159,214,1);
 }
 
+.cellinput {
+    background: white;
+    display: table-cell;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    vertical-align: middle;
+}
+
+.cellinput input {
+    padding-left: 5px;
+    padding-top: 3px;
+    font-size: 80%;
+    background: none;
+    border: none;
+}
+
+.cellinput input:focus {
+    border: none;
+}
+
 .block .fa {
     display: none;
 }
@@ -218,6 +239,42 @@
     color: rgba(42,159,214,1);
 }
 
+.jsonView {
+    background-color: white;
+    font-size: 90%;
+}
+
+.jsonView input[type="text"] {
+    padding: 3px;
+    margin: 5px;
+    border: 1px solid gray;
+    color: gray;
+    border-radius: 3px;
+    line-height: 15px;
+    width: 350px;
+}
+
+.jsonView input[type="text"]:hover {
+    color: white;
+    border: 1px solid gray;
+    background: rgba(42,159,214,0.8);
+}
+
+.jsonView input.keyinput {
+    width: 150px;
+}
+
+.jsonView li {
+    list-style-type: none;
+}
+
+.jsonView .deleteKeyBtn, .jsonView .moveArrayItemBtn {
+    float: left;
+}
+
+.suggestion-item {
+    color: gray;
+}
 
 h4 {
     color: rgb(51, 51, 51);

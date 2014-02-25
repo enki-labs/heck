@@ -328,16 +328,18 @@ tauApp.controller("TaskActive", function ($scope, $http) {
     });
 });
 
-tauApp.controller("TaskConfiguration", function ($scope, $http) {
+tauApp.controller("TaskConfiguration", function ($scope, $http, $q) {
     $scope.items = [];
+    $scope.gridOptions = {};
     $scope.showEditContent = false;
     $scope.editcontent = null;
     $scope.editentity = null;
+    $scope.searchTags = {};
 
-    var params = { params: { action: "list", item: "config" } };
+    /*var params = { params: { action: "list", item: "config" } };
     $http.get("api/task", params).success(function(data) {
         $scope.items = data;
-    });
+    });*/
 
     $scope.editContent = function (row) {
         $scope.editcontent = $.extend(true, {}, row.entity.content);
@@ -347,52 +349,224 @@ tauApp.controller("TaskConfiguration", function ($scope, $http) {
 
     $scope.saveTags = function (scope, ok) {
         scope.$emit('ngGridEventEndCellEdit');
+        if (ok) {
+            $scope.saveConfigHandler(scope.$parent.row.entity);
+        }
     };
 
     $scope.saveContent = function (scope, ok) {
         if (ok) {
             $scope.editentity.content = $scope.editcontent;
+            $scope.saveConfigHandler($scope.editentity);
         }
         $scope.showEditContent = false;
     };
 
+    $scope.addConfigHandler = function (clone) {
+        if (clone) {
+            if ($scope.gridOptions.selectedItems.length > 0) {
+                var newItem = $.extend(true, {}, $scope.gridOptions.selectedItems[0]);
+                newItem.id = null;
+                newItem.last_modified = 0;
+                $scope.items.splice(0, 0, newItem);
+            }
+        }
+        else {
+            $scope.items.splice(0, 0, {id: null, tags: {}, content: {}, last_modified: 0});
+        }
+    };
+
+    $scope.searchTagsHandler = function () {
+        var params = { params: { action: "list", item: "config", filter: JSON.stringify($scope.searchTags) } };
+        $http.get("api/task", params).success(function(data) {
+            $scope.items = data;
+        });
+    };
+
+    $scope.deleteConfigHandler = function () {
+        var params = { params: { action: "delete", item: "config", target: JSON.stringify($scope.gridOptions.selectedItems) } };
+        $http.get("api/task", params).success(function(data) {
+            $scope.gridOptions.selectedItems.forEach( function(rowItem) {
+                var index = $scope.items.indexOf(rowItem);
+                $scope.items.splice(index, 1);
+            });
+            $scope.gridOptions.selectAll(false);
+        });
+    };
+
+    $scope.saveConfigHandler = function (entity) {
+        var params = { params: { action: "save", item: "config", target: JSON.stringify([entity]) } };
+        $http.get("api/task", params).success(function(data) {
+            //$scope.searchTagsHandler();
+        });
+    };
+
+    $scope.searchTags = {};
+    $http.get("api/tag").success(function(data) {
+        $scope.tag_autocomplete = function ($query) {
+            if ($query.indexOf(":") == -1)
+            {  
+                var deferred = $q.defer();
+                deferred.resolve(data.tags);
+                return deferred.promise;
+            }
+            else
+            {  
+                var deferred = $q.defer();
+                var name = $query.substr(0, $query.indexOf(":"));
+                var part = $query.substr($query.indexOf(":")+1, $query.length-1);
+                $http.get("api/tag?target=" + name + "&part=" + part).success(function(data) {
+                    var tags = [];
+                    data.values.forEach(function(value){tags.push(name + ":" + value);});
+                    deferred.resolve(tags);
+                });
+                return deferred.promise;
+            }
+        };
+    });
+
+
     $scope.gridHandler = function () {
-        return { data: "items",
+        $scope.isEmptyObject = function (obj) { return $.isEmptyObject(obj); };
+        $scope.gridOptions = { data: "items",
+                 selectedItems: [],
                  enableSorting: false,
                  enableColumnResize: true,
-                 enableRowSelection: false,
-                 canSelectRows: false,
+                 enableRowSelection: true,
+                 canSelectRows: true,
                  rowHeight: 40,
                  columnDefs: [{field: "tags", 
                                displayName: "Tags", 
-                               cellTemplate: "<span class='label label-primary row-tag' ng-repeat='(name, value) in row.entity.tags'>{{name}}:{{value}}</span>",
+                               cellTemplate: "<span class='small-text' ng-if='isEmptyObject(row.entity.tags)'>double click to edit</span><span class='label label-primary row-tag' ng-repeat='(name, value) in row.entity.tags'>{{name}}:{{value}}</span>",
                                enableCellEdit: true,
+                               width: "40%",
                                editableCellTemplate: "<tags-input ng-model='row.entity.tags' ng-input='row.entity.tags' save='saveTags' custom-class='tag-edit' placeholder='...'></tags-input>"
                               }
                              ,{field: "content",
                                displayName: "Content",
-                               cellTemplate: "<span class='truncate small-text' ng-dblclick='editContent(row)'>{{row.entity.content}}</span>"}
+                               width: "40%",
+                               cellTemplate: "<span class='small-text' ng-if='isEmptyObject(row.entity.content)' ng-dblclick='editContent(row)'>double click to edit</span><span class='truncate small-text' ng-if='!isEmptyObject(row.entity.content)' ng-dblclick='editContent(row)'>{{row.entity.content}}</span>"}
+                             ,{field: "last_modified",
+                               displayName: "Last Modified",
+                               width: "20%",
+                               cellTemplate: "<div cell-ticktime class='small-text' value=row.entity.last_modified></div>"}
                              ]
-               };
+        };
+        return $scope.gridOptions;
     };
 });
 
 tauApp.controller("TaskProcess", function ($scope, $http) {
-    var params = { params: { action: "list", item: "process" } };
-    $http.get("api/task", params).success(function(data) {
-        $scope.items = data;
-    });
+
+    $scope.searchName = "";
+    $scope.searchProcessor = "";
+    $scope.items = [];
+    $scope.gridOptions = {};
+    $scope.showJsonEdit = false;
+
+    $scope.searchHandler = function () {
+        var params = { params: { action: "list", item: "process", filter: JSON.stringify({name: $scope.searchName, processor: $scope.searchProcessor}) } };
+        $http.get("api/task", params).success(function(data) {
+            $scope.items = data;
+        });
+    };
+
+    $scope.addProcessHandler = function (clone) {
+        if (clone) {
+            if ($scope.gridOptions.selectedItems.length > 0) {
+                var newItem = $.extend(true, {}, $scope.gridOptions.selectedItems[0]);
+                newItem.id = null;
+                newItem.last_modified = 0;
+                $scope.items.splice(0, 0, newItem);
+            }
+        }
+        else {
+            $scope.items.splice(0, 0, {id: null, name: "", processor: "", search: {}, output: {}, last_modified: 0});
+        }
+    };
+
+    $scope.editJson = function (row, field) {
+        $scope.jsonField = field;
+        $scope.jsonValue = $.extend(true, {}, row.entity[field]);
+        $scope.jsonEntity = row.entity;
+        $scope.showJsonEdit = true;
+    };
+
+    $scope.saveValue = function (ok, scope, value) {
+        scope.$emit('ngGridEventEndCellEdit');
+        if (ok) {
+            scope.$parent.row.entity[scope.$parent.col.field] = value;
+            $scope.saveHandler(scope.$parent.row.entity);
+        }
+    };    
+
+    $scope.saveJson = function (scope, ok) {
+        if (ok) {
+            $scope.jsonEntity[$scope.jsonField] = $scope.jsonValue;
+            $scope.saveHandler($scope.jsonEntity);
+        }
+        $scope.showJsonEdit = false;
+    };
+
+    $scope.saveHandler = function (entity) {
+        var params = { params: { action: "save", item: "process", target: JSON.stringify([entity]) } };
+        $http.get("api/task", params).success(function(data) {
+        });
+    };
+
+    $scope.gridHandler = function () {
+        $scope.isEmptyObject = function (obj) { return $.isEmptyObject(obj); };
+        $scope.gridOptions = { data: "items",
+                 selectedItems: [],
+                 enableSorting: false,
+                 enableColumnResize: true,
+                 enableRowSelection: true,
+                 canSelectRows: true,
+                 rowHeight: 40,
+                 columnDefs: [{field: "name",
+                               displayName: "Name",
+                               cellTemplate: "<span class='small-text'>{{row.entity.name.length ? row.entity.name : 'double click to edit'}}</span>",
+                               enableCellEdit: true,
+                               width: "15%",
+                               editableCellTemplate: "<div cell-input model='row.entity.name' save='saveValue'></div>"
+                              }
+                             ,{field: "processor",
+                               displayName: "Processor",
+                               cellTemplate: "<span class='small-text'>{{row.entity.processor.length ? row.entity.processor : 'double click to edit'}}</span>",
+                               enableCellEdit: true,
+                               width: "15%",
+                               editableCellTemplate: "<div cell-input model='row.entity.processor' save='saveValue'></div>"
+                              }
+                             ,{field: "search",
+                               displayName: "Search",
+                               width: "30%",
+                               cellTemplate: "<span class='small-text' ng-if='isEmptyObject(row.entity.search)' ng-dblclick='editJson(row,\"search\")'>double click to edit</span><span class='truncate small-text' ng-if='!isEmptyObject(row.entity.search)' ng-dblclick='editJson(row,\"search\")'>{{row.entity.search}}</span>"}
+                             ,{field: "output",
+                               displayName: "Output",
+                               width: "30%",
+                               cellTemplate: "<span class='small-text' ng-if='isEmptyObject(row.entity.output)' ng-dblclick='editJson(row,\"output\")'>double click to edit</span><span class='truncate small-text' ng-if='!isEmptyObject(row.entity.output)' ng-dblclick='editJson(row,\"output\")'>{{row.entity.output}}</span>"}
+                             ,{field: "last_modified",
+                               displayName: "Last Modified",
+                               width: "10%",
+                               cellTemplate: "<div cell-ticktime class='small-text' value=row.entity.last_modified></div>"}
+                             ]
+        };
+        return $scope.gridOptions;
+    };
+
 });
 
 tauApp.controller("SeriesSearch", function ($rootScope, $scope, $http, $q) {
 
+    $scope.tags = {};
+
     $scope.search = function () {
-        var tagSearch = {};
+        /*var tagSearch = {};
         $scope.tags.forEach(function(fullTag){
             var tagParts = fullTag.split(":");
             tagSearch[tagParts[0]] = tagParts[1];
-        });
-        $http.get("/api/find", {params: {tags: JSON.stringify(tagSearch)}}).success( function(data) {
+        });*/
+        $http.get("/api/find", {params: {tags: JSON.stringify($scope.tags)}}).success( function(data) {
             $scope.search_result = data;
         });
     };
@@ -511,6 +685,19 @@ tauApp.directive('grid', function () {
     };
 });
 
+tauApp.directive('cellInput', function () {
+    return {
+        restrict: 'A',
+        template: '<div class="input-group cellinput" ng-blur="save(false, this, model)"><input ng-model="model"><span class="pull-right"><a class="tag-save" ng-click="save(true, this, model)"><i class="fa fa-save"> save</i><a class="tag-save" ng-click="save(false, this, model)"><i class="fa fa-undo"> undo</i></a></span></div>',
+        scope: {
+            model: '&',
+            save: '='
+        },
+        transclude: true,
+        replace: true
+    };            
+});
+
 tauApp.directive('cellDatetime', function () {
     return {
         restrict: 'A',
@@ -522,6 +709,22 @@ tauApp.directive('cellDatetime', function () {
             scope.$watch("value", function (newval) {
                 if (newval == scope.formatValue) return;
                 scope.formatValue = Highcharts.dateFormat("%Y-%m-%d %H:%M:%S.%L", newval);
+            });
+        }
+    };
+});
+
+tauApp.directive('cellTicktime', function () {
+    return {
+        restrict: 'A',
+        replace: true,
+        transclude: true,
+        scope: { value: '=' },
+        template: "<div class='ngCellText'>{{formatValue}}</div>",
+        link: function (scope, elem, attrs) {
+            scope.$watch("value", function (newval) {
+                if (newval == scope.formatValue) return;
+                scope.formatValue = moment.fromTickTime(newval).format("YYYY-MM-DD HH:mm:ss.SSS");
             });
         }
     };
@@ -545,4 +748,5 @@ tauApp.directive('cellEvent', function () {
         }
     };
 });
+
 

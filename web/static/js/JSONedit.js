@@ -154,6 +154,9 @@ app.directive('json', function($compile, $timeout) {
         scope.possibleNumber = function(val) {
             return isNumber(val) ? parseFloat(val) : val;
         };
+        scope.handleChange = function (child, key, val) {
+            
+        };
 
         //////
         // Template Generation
@@ -169,7 +172,7 @@ app.directive('json', function($compile, $timeout) {
                 + '<json ng-switch-when="Object" child="val" type="\'object\'"></json>'
                 + '<json ng-switch-when="Array" child="val" type="\'array\'"></json>'
                 + '<span ng-switch-default class="jsonLiteral"><input type="text" ng-model="val" '
-                    + 'placeholder="Empty" ng-model-onblur ng-change="child[key] = possibleNumber(val)"/>'
+                    + 'placeholder="Empty" ng-blur="child[key] = possibleNumber(val)"/>'
                 + '</span>'
             + '</span>';
         

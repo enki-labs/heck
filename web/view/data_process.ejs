@@ -26,6 +26,7 @@
         <link rel="stylesheet" type="text/css" href="css/ng-tags-input.min.css"></link>
         <script type="text/javascript" src="js/JSONedit.js"></script>
         <link rel="stylesheet" type="text/css" href="css/JSONedit.css"></link>
+        <link rel="stylesheet" type="text/css" href="css/tau.css"></link>
     </head>
     <body ng-controller="DataProcess">
         <% include mainnav %>
@@ -55,19 +56,79 @@
                 <div class="col-md-10">
                     <div class="panel" ng-if="view == 'configuration'" ng-controller="TaskConfiguration">
                         <div class="panel-header">Configuration</div>
+                        <div class="panel-control">
+                            <div style="width: 300px; float: left;">
+                                <tags-input ng-model="searchTags" 
+                                            custom-class="tag-search"
+                                            placeholder="Add search tags...">
+                                    <auto-complete source="tag_autocomplete($query)" 
+                                                   source_value="tag_autocomplete($query)" 
+                                                   min-length=1>
+                                    </auto-complete>
+                                </tags-input>
+                            </div>
+                            <div style="margin-left: 10px; float: left; line-height: 38px; vertical-align: middle;">
+                                <a class="btn btn-primary btn-xs" href="#" ng-click="searchTagsHandler()">
+                                    <i class="fa fa-search icon-white"></i> Search</a>
+                            </div>
+                            <div style="margin-left: 10px; float: left; line-height: 38px; vertical-align: middle;">
+                                <a class="btn btn-primary btn-xs" href="#" ng-click="addConfigHandler(false)">
+                                    <i class="fa fa-plus-square icon-white"></i> New Configuration</a>
+                            </div>
+                            <div style="margin-left: 10px; float: left; line-height: 38px; vertical-align: middle;">
+                                <a class="btn btn-primary btn-xs" href="#" ng-click="addConfigHandler(true)">
+                                    <i class="fa fa-pencil-square icon-white"></i> Clone Selected</a>
+                            </div>
+                            <div style="margin-left: 10px; float: left; line-height: 38px; vertical-align: middle;">
+                                <a class="btn btn-primary btn-xs" href="#" ng-click="deleteConfigHandler()">
+                                    <i class="fa fa-minus-square icon-white"></i> Delete Selected</a>
+                            </div>
+                            <br style="clear: both;" />
+                        </div>
+
                         <div class="panel-inner" style="height: 500px;">
-                            <div style="position: fixed; height: 500px; width: 100%; z-index:100;" ng-if="showEditContent">
-                                <div class="jsonView" defocus>
+                            <div style="position:fixed; height: 500px; width: 81%; overflow-y: scroll; background: white; z-index: 100;" ng-if="showEditContent">
+                                <div class="jsonView" style="width: 80%;">
                                     <json child="editcontent" type="'object'" save="saveContent"></json>
                                 </div>
-                            </div> 
+                            </div>
                             <div style="height: 100%;" ng-grid="gridHandler()"></div>
                         </div>
                     </div>
                     <div class="panel" ng-if="view == 'process-tasks'" ng-controller="TaskProcess">
                         <div class="panel-header">Process Tasks</div>
-                        <div class="panel-inner">
-                            <div ng-repeat="process in items">{{process.id}} {{process.name}} {{process.processor}}</div>
+                        <div class="panel-control">
+                            <div class="input-group" style="float:left; margin-right: 10px;">
+                                <span class="input-group-addon">Name</span><input class="tag-search" type="text" ng-model="searchName" placeholder="" />
+                            </div>
+                            <div class="input-group" style="float:left; margin-right: 10px;">
+                                <span class="input-group-addon">Process</span><input class="tag-search" type="text" ng-model="searchProcessor" placeholder="" />
+                            </div>
+                            <div style="float:left; margin-right: 10px;"> <!-- style="margin-left: 10px; float: left; line-height: 38px; vertical-align: middle;">-->
+                                <a class="btn btn-primary btn-xs" href="#" ng-click="searchHandler()">
+                                    <i class="fa fa-search icon-white"></i> Search</a>
+                            </div>
+                            <div style="margin-left: 10px; float: left;">
+                                    <a class="btn btn-primary btn-xs" href="#" ng-click="addProcessHandler(false)">
+                                        <i class="fa fa-plus-square icon-white"></i> New Process</a>
+                                </div>
+                                <div style="margin-left: 10px; float: left;">
+                                    <a class="btn btn-primary btn-xs" href="#" ng-click="addProcessHandler(true)">
+                                        <i class="fa fa-pencil-square icon-white"></i> Clone Selected</a>
+                                </div>
+                                <div style="margin-left: 10px; float: left;">
+                                    <a class="btn btn-primary btn-xs" href="#" ng-click="deleteProcessHandler()">
+                                        <i class="fa fa-minus-square icon-white"></i> Delete Selected</a>
+                                </div>
+                            <br style="clear: both;" />
+                        </div>
+                        <div class="panel-inner" style="height: 500px;">
+                            <div style="position:fixed; height: 500px; width: 81%; overflow-y: scroll; background: white; z-index: 100;" ng-if="showJsonEdit">
+                                <div class="jsonView" style="width: 80%;">
+                                    <json child="jsonValue" type="'object'" save="saveJson"></json>
+                                </div>
+                            </div>
+                            <div style="height: 100%;" ng-grid="gridHandler()"></div>
                         </div>
                     </div>
                 </div>
