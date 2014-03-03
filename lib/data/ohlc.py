@@ -6,7 +6,7 @@ Data class - open, high, low, close, volume and open interest.
 import time
 from lib import common
 from lib import schema
-from lib.data import update_series, Writer, Reader
+from lib.data import update_series, Writer, Reader, InnerWriter, WriterLock
 from tables import *
 
 
@@ -31,6 +31,42 @@ class OhlcReader (Reader):
 
     def __init__ (self, series):
         super(OhlcReader, self).__init__(series, "series_ohlc")
+
+
+class OhlcInnerWriter (InnerWriter):
+
+    def __init__ (self, writer_lock, first, last):
+        super().__init__(writer_lock, first, last)
+
+    def add (self, t, open, high, low, close, volume, open_interest, actual=None, raw=False):
+        """
+        Add a value to the time series.
+        """
+        row = self._writer_lock._table.row
+        if raw:
+            row['time'] = t
+        else:
+            row['time'] = common.Time.tick(t)
+        row['open'] = open
+        row['high'] = high
+        row['low'] = low
+        row['close'] = close
+        row['volume'] = volume
+        row['openInterest'] = open_interest
+        row['actual'] = actual
+        row.append()
+    
+
+class OhlcWriterLock (WriterLock):
+    """
+    A writable OHLC data store with early locking.
+    """
+
+    def __init__ (self, series, filters, overwrite, append=True):
+        super().__init__(series, filters, overwrite, append, "series_ohlc", OhlcDescription)
+
+    def writer (self, first, last):
+        return OhlcInnerWriter(self, first, last)
 
 
 class OhlcWriter (Writer):

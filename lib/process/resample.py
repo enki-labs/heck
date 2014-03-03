@@ -19,7 +19,8 @@ class Process (ProcessBase):
         return self._generate_multi()
  
    
-    def run (self, queued):
+    def run (self, queued, progress):
+        print("resample %s" % (queued))
         series = schema.select_one("series", schema.table.series.id==queued.depend[0])
         wrapper = DataFrameWrapper(series)
         ohlc_sampler = { "open":"first"

@@ -8,7 +8,10 @@ import pytz
 from lib import data
 from lib import common
 from lib.inbound import bloomberg_symbol
+import exception
 
+import requests
+import json
 
 class Import (object):
 
@@ -24,19 +27,24 @@ class Import (object):
             return float(val)
 
     @staticmethod
-    def parse (reader):
+    def parse (reader, progress):
         """
         Parse a data file.
         """
         reading = False
         store = None
         ticker = ""
-        line_count = 0
         cache = []
+        cache_data = []
+        
+        
+        for line in reader.readlines():
+            progress.progress_end_increment()
+        reader.seek(0)
 
         for line in reader.readlines():
-            line_count = line_count + 1
-            if line_count % 1000 == 0: common.log.debug("line %s" % line_count)
+            progress.progress()
+
             line = line.decode("utf-8").strip()
             if not reading and line == "START-OF-DATA":
                 common.log.debug("start reading")
@@ -50,28 +58,28 @@ class Import (object):
 
                 if has_date:
                     if ticker == "":
-                        common.log.debug("first ticker")
                         ticker = vals[0]
                     elif ticker != vals[0]:
-                        if len(cache) > 0:
+                        if len(cache_data) > 0:
                             tags = dict(format="ohlc", period="1day")
                             tags.update(bloomberg_symbol.parse_symbol(ticker))
-                            common.log.info("%s" % (tags))
-                            try:
-                                with data.get_writer(tags, first=cache[0][0], last=cache[-1][0], create=True, append=True) as writer:
-                                    for row in cache:
-                                        writer.add(*row)
-                                    writer.save()
-                            except exception.OverlapException:
-                                common.log.info("ignore overlapping data")
-                            cache = []
-
+                            cache.append({"tags": tags, "rows": cache_data})
+                            #params = {"action": "add", "tags": json.dumps(tags), "data": json.dumps(cache)}
+                            #req = requests.post("http://beta.taustack.com:3030/internal/store", data=params)
+                            #try:
+                            #    with data.get_writer(tags, first=cache[0][0], last=cache[-1][0], create=True, append=True) as writer:
+                            #        for row in cache:
+                            #            writer.add(*row)
+                            #        writer.save()
+                            #except exception.OverlapException:
+                            #    common.log.info("ignore overlapping data")
                         ticker = vals[0]
+                        cache_data = []
 
                     if len(vals[3].strip()) != 0: 
                         tickTime = datetime.datetime.strptime(vals[3], "%Y/%m/%d")
                         tickTime = tickTime.replace(tzinfo=pytz.utc)
-                        cache.append([ tickTime
+                        cache_data.append([ common.Time.tick(tickTime)
                                      , Import.parse_value(vals[4])
                                      , Import.parse_value(vals[5])
                                      , Import.parse_value(vals[6])
@@ -80,6 +88,6 @@ class Import (object):
                                      , Import.parse_value(vals[9])
                                      , Import.parse_value(vals[10]) ])
 
-        common.log.debug("parsed %s lines" % line_count)
-
+        params = {"action": "add", "data": json.dumps(cache)}
+        req = requests.post("http://beta.taustack.com:3030/internal/store", data=params)
 

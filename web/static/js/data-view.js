@@ -321,11 +321,85 @@ tauApp.controller("DataProcess", function ($scope) {
 
 });
 
-tauApp.controller("TaskActive", function ($scope, $http) {
-    var params = { params: { action: "active" } };
-    $http.get("api/task", params).success(function(data) {
-        $scope.active = data;
-    });
+tauApp.controller("TaskActive", function ($scope, $http, $interval) {
+   
+    $scope.isEmptyObject = function (obj) { return $.isEmptyObject(obj); };
+    $scope.isArray = function (obj) { return $.isArray(obj); }
+ 
+    $scope.update = function () {
+        var params = { params: { action: "active" } };
+        $http.get("api/task", params).success(function(data) {
+            $scope.active = data;
+        });
+    };
+
+    $scope.update();
+    var updatePromise = $interval($scope.update, 5000);
+    $scope.$on("$destroy", function () { $interval.cancel(updatePromise); });
+});
+
+tauApp.controller("TaskStatus", function ($scope, $http, $interval) {
+
+    $scope.init = function (filter) {
+        $scope.filter = filter;
+    };
+
+    $scope.tasks = {};
+    $scope.gridOptions = {};
+
+    $scope.update = function () {
+        if ($scope.filter) {
+        var params = { params: { action: $scope.filter } };
+        $http.get("api/task", params).success(function(data) {
+            $scope.tasks = data;
+        });
+        } else { console.log("no filter"); }
+    };
+
+    $scope.gridHandler = function () {
+        $scope.isEmptyObject = function (obj) { return $.isEmptyObject(obj); };
+        $scope.statusLabel = function (status) {
+            if (status == "SUCCESS") return "label-success";
+            else if (status == "FAILURE") return "label-danger";
+            else if (status == "START") return "label-primary";
+            else if (status == "PENDING") return "label-default";
+            else return "label-default";
+        };
+        $scope.gridOptions = { data: "tasks",
+                 selectedItems: [],
+                 enableSorting: false,
+                 enableColumnResize: true,
+                 enableRowSelection: false,
+                 canSelectRows: false,
+                 rowHeight: 30,
+                 columnDefs: [{field: "node",
+                               displayName: "Node",
+                               cellTemplate: "<span class='cell-div'>{{row.entity.node}}</span>",
+                               enableCellEdit: true,
+                               width: "30%"
+                              },
+                              {field: "name",
+                               displayName: "Task",
+                               cellTemplate: "<span class='cell-div'>{{row.entity.name}}</span>",
+                               enableCellEdit: true,
+                               width: "30%"
+                              },
+                              {field: "time_start",
+                               displayName: "Started",
+                               width: "20%",
+                               cellTemplate: "<div class='cell-div' cell-ticktime value='row.entity.time_start'></div>"}
+                             ,{field: "",
+                               displayName: "Progress",
+                               width: "18%",
+                               cellTemplate: "<span class='cell-div' ng-if='row.entity.status!=\"PROGRESS\"'><span class='label' ng-class='statusLabel(row.entity.status)'>{{row.entity.status}}</span></span><div class='progress progress-striped active' ng-if='row.entity.status==\"PROGRESS\"' style='margin-top: 5px; margin-left: 20px; margin-right: 20px;'><div style='position: absolute; margin-left: 70px; margin-top: 0px; color: rgba(60, 60, 60, 0.95); font-size: 85%;'>{{row.entity.per_second}}/sec (about {{row.entity.estimate}})</div><div class='progress-bar' role='progressbar' aria-valuemin='0' aria-valuemax='100' style='width: {{row.entity.progress}}%'></div></div>"}
+                             ]
+        };
+        return $scope.gridOptions;
+    };
+
+    $scope.update();
+    var updatePromise = $interval($scope.update, 5000);
+    $scope.$on("$destroy", function () { $interval.cancel(updatePromise); });
 });
 
 tauApp.controller("TaskConfiguration", function ($scope, $http, $q) {

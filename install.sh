@@ -162,6 +162,9 @@ apt-get install -y rabbitmq-server
 rabbitmqctl add_user celery pass
 rabbitmqctl add_vhost task
 rabbitmqctl set_permissions -p task celery ".*" ".*" ".*"
+/usr/lib/rabbitmq/bin/rabbitmq-plugins enable rabbitmq_management
+service rabbitmq-server restart
+rabbitmqctl set_user_tags celery monitoring
 
 
 

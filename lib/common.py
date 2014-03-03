@@ -26,9 +26,12 @@ instanceid = str(uuid.uuid4())
 store_engine = os.environ["HECK_STORE_ENGINE"]
 db_connection = os.environ["HECK_DB"]
 
-
 log = logging.getLogger("heck")
-log_level = logging.DEBUG #autologging.TRACE
+log_level = logging.INFO
+if os.environ["HECK_LOG"] == "DEBUG":
+    log_level = logging.DEBUG
+elif os.environ["HECK_LOG"] == "TRACE":
+    log_level = autologging.TRACE
 log.setLevel(log_level)
 __stdout_handler = logging.StreamHandler(sys.stdout)
 __stdout_handler.setLevel(log_level)

@@ -50,7 +50,6 @@ class ProcessBase (object):
         self._remove = self._process.output_dict["remove"]
         self._params = self._process.output_dict["params"]
         self._config_keys = None
-        self._celery_id = None
 
         if "config" in self._params:
             config = self._params["config"]
@@ -60,18 +59,6 @@ class ProcessBase (object):
     @property
     def id (self):
         return self._process.id
-
-    def set_celery (self, celery_id, backend):
-        """ Set the Celery backend for progress reporting """
-        self._celery_id = celery_id
-        self._celery_backend = backend
-
-    def progress (self, current, end):
-        """ Report progress """
-        if self._celery_id:
-            self._celery_backend.store_result(self._celery_id,
-                      result={"step": current, "total": end},
-                      status="PROGRESS")
 
     def get_config (self, tags):
         """ Return a config based on the process target tags

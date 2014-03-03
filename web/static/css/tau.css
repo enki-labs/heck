@@ -276,6 +276,30 @@
     color: gray;
 }
 
+.progress-bar {
+    -webkit-transition: none;
+    -moz-transition: none;
+    -ms-transition: none;
+    -o-transition: none;
+    transition: none;
+}
+
+.progress {
+    background: gray;
+    height: 15px;
+}
+
+.cell-div {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    vertical-align: middle;
+    width: 100%;
+    line-height: 30px;
+    margin-left: 10px;
+    font-size: 85%;
+}
+
 h4 {
     color: rgb(51, 51, 51);
 }

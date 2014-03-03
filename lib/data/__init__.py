@@ -57,6 +57,43 @@ def get_reader (series):
     else:
         raise Exception("Unknown series format %s" % (tags["format"]))
 
+def get_writer_lock (tags, create=True, overwrite=False, append=False):
+    """
+    Open a store wrapper and create series if required.
+    """
+
+    from lib.data import ohlc
+    from datetime import datetime
+
+    if "format" not in tags:
+        raise Exception("Format is a required series tag")
+
+    if "symbol" not in tags:
+        raise Exception("Symbol is a required series tag")
+
+    if tags["format"] not in ["ohlc", "tick"]:
+        raise Exception("Unknown series format %s" % (tags["format"]))
+
+    tagids = resolve_tags(tags, create)    
+    series = schema.select_one("series", schema.table.series.symbol==tags["symbol"], schema.table.series.tags==tagids)
+    if not series and not create:
+        raise Exception("Series (%s) (%s) does not exist" % (tags, tagids))
+    elif not series:
+        series = schema.table.series()
+        series.symbol = tags["symbol"]
+        series.tags = tagids
+        schema.save(series)
+
+    if tags["format"] == "ohlc":
+        filters = Filters(complevel = 9, complib = "blosc", fletcher32 = False)
+        return ohlc.OhlcWriterLock(series, filters, overwrite=overwrite, append=append)
+    elif tags["format"] == "tick":
+        filters = Filters(complevel = 9, complib = "blosc", fletcher32 = False)
+        return tick.TickWriterLock(series, filters, overwrite=overwrite, append=append)
+    else:
+        raise Exception("Unknown series format %s" % (tags["format"]))
+    
+
 def get_writer (tags, first, last, create=True, overwrite=False, append=False):
     """
     Open a store and create if required.
@@ -202,6 +239,173 @@ class Reader (object):
         if self._table: self._table.close()
         if self._file: self._file.close()
         if self._store: self._store.__exit__(None, None, None)
+
+
+class InnerWriter (object):
+
+    def __init__ (self, writer_lock, first=None, last=None):
+        self._writer_lock = writer_lock
+        if first and last:
+            self._check_overlap(first, last)
+
+
+    def save (self, table_only=False):
+        self._writer_lock.save(table_only)
+
+
+    def _get_row (self, index):
+        """
+        Get the given row by index and time sort.
+        """
+        rowcount = self._writer_lock._table.nrows
+        if rowcount == 0: return None
+
+        if index >= 0:
+            return self._writer_lock._table.read_sorted(self._writer_lock._table.cols.time, start=index, stop=index+1)[0]
+        else:
+            return self._writer_lock._table.read_sorted(self._writer_lock._table.cols.time, start=(rowcount + index), stop=(rowcount + index + 1))[0]
+
+
+    def _check_overlap (self, first, last):
+        """
+        Check for overlap between existing and new data.
+        """
+        rowcount = self._writer_lock._table.nrows
+        if rowcount == 0: return
+
+        first_row = self._get_row(0)
+        last_row = self._get_row(-1)
+
+        if first < last_row["time"] and last > first_row["time"]:
+            #find overlapping region
+            for row in self._writer_lock._table.itersorted(self._writer_lock._table.cols.time):
+                if row["time"] > first:
+                    if not self._writer_lock._overwrite:
+                        if last > row["time"]:
+                            raise exception.OverlapException()
+                        else:
+                            break
+                    else:
+                        pass #TODO: copy to new table, filter overlap
+
+    
+class WriterLock (object):
+    """
+    Base class for data store writers with early locks.
+    """
+
+    def __init__ (self, series, filters, overwrite, append, path_name, description):
+        """
+        Constructor.
+        """
+        self._series = series
+        self._filters = filters
+        self._overwrite = overwrite
+        self._append = append
+        self._store = None
+        self._file = None
+        self._table = None
+        self._path_name = path_name
+        self._description = description
+
+
+    def writer (self, first=None, last=None):
+        """
+        Return a writer instance for this lock.
+        """
+        raise NotImplementedError()
+
+
+    def save (self, table_only=False):
+        """
+        Save the file and flush data.
+        """
+        self._table.flush()
+        self._table.flush_rows_to_index()
+        self._table.cols.time.reindex_dirty()
+        self._table.flush()
+        if not table_only:
+            count = int(self._table.nrows)
+            start = -1 if count == 0 else int(self._get_row(0)['time'])
+            end = -1 if count == 0 else int(self._get_row(-1)['time'])
+            self._file.flush()
+            self._store.save()
+            update_series(self._series, count, start, end)
+
+
+    def __enter__ (self):
+        """
+        Init for 'with' block.
+        """
+        if self._append:
+            self._store = common.store.append(
+                          common.Path.resolve_path(self._path_name, self._series)
+                          , open_handle=False).__enter__()
+        else:
+            self._store = common.store.write(
+                          common.Path.resolve_path(self._path_name, self._series)
+                          , open_handle=False).__enter__()
+
+        try:
+            self._file = open_file(self._store.local_path(), mode=("a" if self._append else "w"), title="")
+            if "data" in self._file.root:
+                self._table = self._file.root.data
+            else:
+                self._table = self._file.createTable(self._file.root, 'data', self._description, "data", filters=self._filters)
+                self._table.cols.time.create_csindex()
+                self._table.autoindex = False
+        except Exception:
+            self.__exit__(None, None, None)
+            raise
+
+        return self
+ 
+
+
+    def __exit__ (self, typ, value, tb):
+        """
+        Handle 'with' exit.
+        """
+        if self._file:
+            self._file.close()
+        if self._store:
+            self._store.__exit__(None, None, None)
+
+
+    def _get_row (self, index):
+        """
+        Get the given row by index and time sort.
+        """
+        rowcount = self._table.nrows
+        if rowcount == 0: return None
+
+        if index >= 0:
+            return self._table.read_sorted(self._table.cols.time, start=index, stop=index+1)[0]
+        else:
+            return self._table.read_sorted(self._table.cols.time, start=(rowcount + index), stop=(rowcount + index + 1))[0]
+
+
+    def _check_overlap (self, first, last):
+        """
+        Check for overlap between existing and new data.
+        """
+        rowcount = self._table.nrows
+        if rowcount == 0: return
+
+        first_row = self._get_row(0)
+        last_row = self._get_row(-1)
+
+        if first < last_row["time"] and last > first_row["time"]:
+            #find overlapping region
+            for row in self._table.itersorted(self._table.cols.time):
+                if row["time"] > first:
+                    if not self._overwrite:
+                        if last > row["time"]:
+                            raise exception.OverlapException()
+                        else:
+                            break
+                    else:
+                        pass #TODO: copy to new table, filter overlap
 
 
 class Writer (object):

@@ -35,10 +35,18 @@
             <div class="row-fluid">    
                 <div class="col-md-2">
                     <div class="panel" ng-controller="TaskActive">
-                        <div class="panel-header">Active Nodes</div>
+                        <div class="panel-header">Working</div>
                         <div class="panel-inner">
                             <ul class="nav nav-pills nav-stacked">
-                                <li class="active" ng-repeat="(key, val) in active"><a class="small-text" href="#"><span class="badge pull-right">{{val.length}}</span>{{key}}</a></li>
+                                <li class="active" ng-if="isEmptyObject(active.executing)" ng-click="show('active')"><a class="small-text" href="#">no active workers</a></li>
+                                <li class="active" ng-repeat="(key, val) in active.executing" ng-click="show('active')"><a class="small-text" href="#"><span class="badge pull-right">{{val}}</span>{{key}}</a></li>
+                            </ul>
+                        </div>
+                        <div class="panel-header">Queued</div>
+                        <div class="panel-inner">
+                            <ul class="nav nav-pills nav-stacked">
+                                <li class="active" ng-if="isEmptyObject(active.queues)" ng-click="show('active')"><a class="small-text" href="#">no active queues</a></li>
+                                <li class="active" ng-repeat="(key, val) in active.queues"><a class="small-text" href="#"><span class="badge pull-right">{{isArray(val) ? val.length : val}}</span>{{key}}</a></li>
                             </ul>
                         </div>
                     </div>
@@ -54,6 +62,16 @@
                 </div>
                 
                 <div class="col-md-10">
+                    <div class="panel" ng-if="view == 'active'" ng-controller="TaskActive">
+                        <div class="panel-header">Active Tasks</div>
+                        <div class="panel-inner" style="height: 500px;" ng-controller="TaskStatus" ng-init="init('working')">
+                            <div style="height: 100%;" ng-grid="gridHandler()"></div>
+                        </div>
+                        <div class="panel-header">Failed Tasks</div>
+                        <div class="panel-inner" style="height: 200px;" ng-controller="TaskStatus" ng-init="init('failed')">
+                            <div style="height: 100%;" ng-grid="gridHandler()"></div>
+                        </div>
+                    </div>
                     <div class="panel" ng-if="view == 'configuration'" ng-controller="TaskConfiguration">
                         <div class="panel-header">Configuration</div>
                         <div class="panel-control">

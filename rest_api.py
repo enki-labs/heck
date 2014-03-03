@@ -6,10 +6,16 @@ from twisted.internet import reactor
 from twisted.web.server import Site
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
+import requests
 import numpy as np
 import memcache
 from sqlalchemy import func
 from sqlalchemy import distinct
+from sqlalchemy import desc
+import celery
+import redis
+from datetime import timedelta
+from babel.dates import format_timedelta
 
 from config import prod
 from lib import schema
@@ -18,7 +24,6 @@ from lib import common
 from lib.process import DataFrameWrapper
 from lib.data import spark
 
-memcache = memcache.Client(['127.0.0.1:11211'], debug=0)
 
 def get_series (args):
     #TODO add query and data caching
@@ -26,7 +31,7 @@ def get_series (args):
     search_tags_ids = data.resolve_tags(search_tags, create=False)
     series = schema.table.series
     with schema.select("series", series.tags.contains(search_tags_ids)) as select:
-        return select.all()
+        return select.limit(100).all()
 
 
 def get_data (args):
@@ -56,7 +61,7 @@ class Data (Resource):
         response = dict(data=[], volume=[], adj=[], tstart=0, tend=0, istart=0, iend=0)
 
         with schema.select("series", series.id==int(request.args[b"id"][0].decode("utf-8"))) as select:
-            with data.get_reader(select.all()[0]) as reader: 
+            with data.get_reader(select.first()) as reader: 
                 rows = reader._table.nrows
                 from_index = max(0, int(request.args[b"start"][0].decode("utf-8"))) if b"start" in request.args else 0
                 to_index = min(int(request.args[b"end"][0].decode("utf-8")), rows) if b"end" in request.args else rows
@@ -195,7 +200,7 @@ class Find (Resource):
         series = schema.table.series
         series_list = []
         with schema.select("series", series.tags.contains(search_tags_ids)) as select:
-            for s in select.all():
+            for s in select.limit(100).all():
                 series_list.append({"id":s.id, "symbol":s.symbol, "tags":data.decode_tags(s.tags)})
         request.setHeader(b'Content-Type', b'text/json')
         request.write(json.dumps(series_list).encode())
@@ -220,7 +225,7 @@ class Summary (Resource):
             response = dict(summary=[], tzero=0, tmax=0, imax=0)
 
             with schema.select("series", series.id==int(request.args[b"id"][0].decode("utf-8"))) as select:
-                with data.get_reader(select.all()[0]) as reader:
+                with data.get_reader(select.first()) as reader:
                     rows = reader._table.nrows
                     read_format = request.args[b"format"][0].decode("utf-8")
                     resolution = int(request.args[b"resolution"][0].decode("utf-8"))
@@ -296,18 +301,34 @@ class Tag (Resource):
         return b""
 
 
+class RabbitmqAdmin (object):
+    def __init__ (self, args):
+        self._auth = (args.celery_user, args.celery_pass)
+        self._api = "http://%s:55672/api" % args.celery_host
+
+    def queues (self):
+        resp = requests.get("%s/queues/task" % self._api, auth=self._auth)
+        result = []
+        for queue in resp.json():
+            if queue["name"] == "celery":
+                result.append({"name": queue["node"],
+                               "messages": queue["messages"]})
+        return result
+
 class Task (Resource):
 
     isLeaf = True
 
     def __init__ (self, args):
         super().__init__()
-        import celery
-        self._celery = celery.Celery()
-        config = {"BROKER_URL": args.celery_broker,
-                  "CELERY_RESULT_BACKEND": args.celery_backend,
-                  "CELERY_RESULT_DB_TABLENAMES": args.celery_tables}
-        self._celery.config_from_object(config)
+        #import celery
+        #self._celery = celery.Celery()
+        #config = {"BROKER_URL": args.celery_broker,
+        #          "CELERY_RESULT_BACKEND": "database",
+        #          "CELERY_RESULT_DBURI": args.celery_backend,
+        #          "CELERY_RESULT_DB_TABLENAMES": args.celery_tables}
+        #self._celery.config_from_object(config)
+        #self._amqp_api = RabbitmqAdmin(args) 
 
     def getChild (self, name, request):
         return FourOhFour()
@@ -318,7 +339,41 @@ class Task (Resource):
         result = {}
         
         if action == "active":        
-            result = self._celery.control.inspect().active()
+            #executing = self._celery.control.inspect().active()
+            #queues = self._amqp_api.queues()
+            queues = celery_client.control.inspect().reserved()
+            if queues:
+                queues["unassigned"] = redis_client.llen("celery")
+                queues["control"] = redis_client.llen("control")
+            else:
+                queues = dict(unassigned=redis_client.llen("celery"), control=redis_client.llen("control"))
+
+            executing = {}
+            with schema.query("status", schema.table.status.node, func.count(schema.table.status.id)) as items:
+                for row in items.filter(schema.table.status.status=="PROGRESS").group_by(schema.table.status.node).all():
+                    print(row)
+                    executing[row[0]] = row[1]
+            result = {"executing": executing,
+                      "stats": celery_client.control.inspect().stats(),
+                      "queues": queues}
+            
+        if action in ["working", "failed"]:
+            result = []
+            with schema.select("status") as items:
+                if action == "failed":
+                    items = items.filter(schema.table.status.status=="FAILURE")
+                for item in items.order_by(desc(schema.table.status.last_modified)).order_by(desc(schema.table.status.started)).limit(100).all():
+                    progress = 0
+                    per_second = 0
+                    estimate = ""
+                    item_result = json.loads(item.result)
+                    if item.status == "PROGRESS":
+                        progress = int(item_result["step"]/item_result["total"]*100)
+                        per_second = item_result["per_second"]
+                        est_seconds = (item_result["total"] - item_result["step"])/item_result["per_second"]
+                        estimate = format_timedelta(timedelta(seconds=est_seconds), locale="en_US")
+                    result.append({"node": item.node, "task_id": item.task_id, "name": item.name, "status": item.status, "progress": progress, "per_second": per_second, "estimate": estimate, "time_start": item.started, "time_end": item.last_modified, "result": item_result}) 
+
         elif action == "list":
             item = request.args[b"item"][0].decode("utf-8")
             item_filter = json.loads(request.args[b"filter"][0].decode("utf-8"))
@@ -326,7 +381,7 @@ class Task (Resource):
                 result = []
                 tags = data.resolve_tags(item_filter, create=False)
                 with schema.select("config", schema.table.config.tags.contains(tags)) as items:
-                    for row in items.all():
+                    for row in items.limit(100).all():
                         rowdict = row.to_dict()
                         rowdict["content"] = yaml.load(rowdict["content"])
                         rowdict["tags"] = data.decode_tags(rowdict["tags"])
@@ -338,7 +393,7 @@ class Task (Resource):
                 sys.stdout.flush()
                 with schema.select(item, schema.table.process.name.ilike("%%%s%%" % item_filter["name"]), 
                                          schema.table.process.processor.ilike("%%%s%%" % item_filter["processor"])) as items:
-                    for row in items.all():
+                    for row in items.limit(100).all():
                         result.append(row.to_dict())
         elif action == "delete":
             item = request.args[b"item"][0].decode("utf-8")
@@ -390,7 +445,7 @@ class Task (Resource):
             result["task"] = []
             #TODO does the Celery API support listing tasks in DB backend?
             with schema.query("celery_task", "task_id") as tasks:
-                for task in tasks.from_statement("select task_id from celery_task").all():
+                for task in tasks.from_statement("select task_id from celery_task").limit(100).all():
                     task_info = self._celery.backend.get_task_meta(task[0])
                     task_info["date_done"] = common.Time.tick(task_info["date_done"])
                     result["task"].append(task_info)
@@ -455,10 +510,22 @@ class FourOhFour (Resource):
 
 parser = argparse.ArgumentParser(description="REST API")
 parser.add_argument("--port", type=int, help="API port (eg: 3010)", required=True)
+parser.add_argument("--celery_user", help="Celery broker user", required=True)
+parser.add_argument("--celery_pass", help="Celery broker password", required=True)
+parser.add_argument("--celery_host", help="Celery broker host (eg: localhost)", required=True)
 parser.add_argument("--celery_broker", help="Celery broker URL (eg: amqp://celery:pass@localhost:5672/task)", required=True)
 parser.add_argument("--celery_backend", help="Celery DB URL (eg: db+postgresql://heck:pass@localhost/heck)", required=True)
 parser.add_argument("--celery_tables", type=json.loads, help='Celery DB table names (eg: {"task": "celery_task", "group": "celery_group"})', required=True) 
 args = parser.parse_args()
+
+celery_client = celery.Celery()
+celery_client.config_from_object({"BROKER_URL": args.celery_broker,
+                  "CELERY_RESULT_BACKEND": "database",
+                  "CELERY_RESULT_DBURI": args.celery_backend,
+                  "CELERY_RESULT_DB_TABLENAMES": args.celery_tables})
+
+memcache = memcache.Client(['127.0.0.1:11211'], debug=0)
+redis_client = redis.StrictRedis(host='localhost', port=6379, db=0)
 
 res = Index(args)
 factory = Site(res)

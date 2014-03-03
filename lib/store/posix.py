@@ -86,9 +86,9 @@ class StoreFile (store.StoreFile):
 
     def __enter__ (self):
         from lib import common
-        common.log.info("locking file (%s)" % (self._path))
+        common.log.debug("locking file (%s)" % (self._path))
         self._lock.acquire()
-        common.log.info("locked file (%s)" % (self._path))
+        common.log.debug("locked file (%s)" % (self._path))
         if self._open_handle:     
             self._file = open(self._path, "%sb" % (self._mode))
         return self
@@ -98,7 +98,7 @@ class StoreFile (store.StoreFile):
         if self._file:
             self._file.close()
         self._lock.release()
-        common.log.info("released file (%s)" % (self._path))
+        common.log.debug("released file (%s)" % (self._path))
 
     def local (self):
         return self._file
@@ -108,7 +108,7 @@ class StoreFile (store.StoreFile):
 
     def save (self):
         from lib import common
-        common.log.info("save file (%s)" % (self._path))
+        common.log.debug("save file (%s)" % (self._path))
         if self._mode == 'r':
             raise Exception("File in read mode - cannot write")
         if self._file:

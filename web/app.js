@@ -67,16 +67,16 @@ app.configure(function() {
 
 app.post("/login", 
 passport.authenticate("local"),
-function (req, res) { console.log("LOGIN OK!!!!"); res.redirect("/"); });
+function (req, res) { res.redirect("/"); });
 
-app.get("/", ensureLoggedIn("/login"), data().view);
+app.get("/", ensureLoggedIn("index.html"), data().view);
 
-app.get("/data-view", ensureLoggedIn("/login"), data().view);
+app.get("/data-view", ensureLoggedIn("index.html"), data().view);
 
-app.get("/data-process", ensureLoggedIn("/login"), data().process);
+app.get("/data-process", ensureLoggedIn("index.html"), data().process);
     
 var request = require("request");
-app.get(/^\/api\/.*/, ensureLoggedIn("/login"), function (req, res)
+app.get(/^\/api\/.*/, ensureLoggedIn("index.html"), function (req, res)
 {
     request(url.resolve(args.backend, req.url)).pipe(res);
 });

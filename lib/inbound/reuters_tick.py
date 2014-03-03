@@ -74,22 +74,28 @@ class Import (object):
         return None
 
     @staticmethod
-    def parse (reader):
+    def parse (reader, progress):
         """
         Parse a data file.
         """
-        line_count = 0
-
         #read second line
         reader.readline()
         second_line = reader.readline().decode("utf-8").strip()
+        progress.progress_end_increment() #header line not included in count
         
-        #read last line
-        reader.seek(-2, 2)
-        while reader.read(1) != b"\n":
-            reader.seek(-2, 1) # seek backwards
-        last_line = reader.readline().decode("utf-8").strip()
+        #read line count
+        for line in reader.readlines():
+            progress.progress_end_increment()
+        last_line = line.decode("utf-8").strip()
         reader.seek(0, 0)
+        reader.readline() #skip header
+
+        ##read last line
+        #reader.seek(-2, 2)
+        #while reader.read(1) != b"\n":
+        #    reader.seek(-2, 1) # seek backwards
+        #last_line = reader.readline().decode("utf-8").strip()
+        #reader.seek(0, 0)
         
         tags = dict(format="tick", period="tick")
         second_line_parts = second_line.split(",")
@@ -106,10 +112,7 @@ class Import (object):
 
             for line in reader.readlines():
                 line = line.decode("utf-8").strip()
-                line_count = line_count + 1
-                if line_count == 1: continue #skip header
-
-                if line_count % 100000 == 0: common.log.debug("line %s" % line_count)
+                progress.progress()
 
                 parts = line.split(",")
                 event = Import.parse_event(parts[5])
@@ -128,6 +131,5 @@ class Import (object):
                               , Import.parse_value(parts[11])
                               , raw=True )
             writer.save()
-        common.log.debug("parsed %s lines" % line_count)
 
 
