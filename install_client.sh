@@ -53,6 +53,7 @@ pip install pywebhdfs
 pip install python3-memcached
 pip install redis
 pip install Celery
+pip install -U kombu==3.0.12
 
 apt-get install -y libhdf5-serial-dev
 pip install tables
