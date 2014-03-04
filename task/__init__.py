@@ -107,7 +107,7 @@ class BackendStore (object):
 
 
     def progress_end (self, end):
-        self._progress_end = end
+        self._progress_end = int(end)
 
 
     def progress_end_increment (self):

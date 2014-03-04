@@ -20,9 +20,14 @@ def table (base):
         depend = Column(ARRAY(types.Integer))
         status = Column(types.Unicode(1000))
 
-        #def __init__ (self):
-        #    from lib.schema import StringDictionaryWrapper
-        #    self.tags_dict = StringDictionaryWrapper(self, "tags")
+        _tags_dict = None
+
+        @property
+        def tags_dict (self):
+            if not self._tags_dict:
+                from lib.schema import StringDictionaryWrapper
+                self._tags_dict = StringDictionaryWrapper(self, "tags")
+            return self._tags_dict
 
         @validates('depend')
         def _set_depend (self, key, value):

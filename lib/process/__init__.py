@@ -65,7 +65,7 @@ class ProcessBase (object):
             and config key """
         if self._config_keys == None:
             raise exception.NoConfigKeyException()
-        
+
         config_tags = {}
         for key in self._config_keys:
             config_tags[key] = tags[key]
@@ -74,7 +74,8 @@ class ProcessBase (object):
         config = schema.select_one("config", schema.table.config.tags==config_tags_ids)
         if config == None:
             raise exception.NoConfigException(tags, self._config_keys)
-        return config.content                
+        print(config)
+        return config                
 
     def _generate_multi (self):
         """ Generate series on one in one out basis """
@@ -84,7 +85,7 @@ class ProcessBase (object):
         outputs = []
         with schema.select("series"
                          , series.tags.contains(include_tags_ids)
-                         #, not_(series.tags.contains(exclude_tags_ids))
+                         , not_(series.tags.contains(exclude_tags_ids))
                          ) as select:
             for selected in select.all():
                 tags = data.decode_tags(selected.tags)
@@ -93,6 +94,6 @@ class ProcessBase (object):
                         del[name]
                 for name, value in self._add.items():
                     tags[name] = value
-                outputs.append(dict(last_modified=selected.last_modified, tags=tags, depend=[selected.id]))
+                outputs.append(dict(input_last_modified=selected.last_modified, output_tags=tags, output_depend=[selected.id]))
         return outputs
 

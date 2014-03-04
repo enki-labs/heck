@@ -23,8 +23,8 @@ def generate (self):
             from sqlalchemy.exc import IntegrityError
             queued = schema.table.process_queue()
             queued.process = process_id
-            queued.tags = generated["tags"]
-            queued.depend = generated["depend"]
+            queued.tags = generated["output_tags"]
+            queued.depend = generated["output_depend"]
             try:
                 schema.save(queued)
             except IntegrityError:
@@ -32,21 +32,28 @@ def generate (self):
 
         with schema.select("process") as select:
             for process_def in select.all():
-                if process_def.id != 4:
+                if process_def.id != 7:
                     continue
                 proc = process.get(process_def)
                 for generated in proc.generate():
+                    generate = False
                     try:
-                        with schema.select( "series"
-                                      , schema.table.series.tags.contains(data.resolve_tags(generated["tags"], create=False))) as select2:
-                            selected = select2.all()
-                            if len(selected) > 0:
-                                if selected[0].id != generated["depend"] and selected[0].last_modified < generated["last_modified"]:
-                                    print("%s < %s" % (selected[0].last_modified, generated["last_modified"]))
-                                    queue(proc.id, generated)
-                            else:
-                                queue(proc.id, generated)
+                        generated_series = schema.select_one( "series"
+                                      , schema.table.series.tags == data.resolve_tags(generated["output_tags"], create=False))
+                        if generated_series:
+                            generate = generated["input_last_modified"] > generated_series.last_modified
+                            if not generate: #check modified config
+                                try:
+                                    config = proc.get_config(generated["output_tags"])
+                                    generate = config.last_modified > generated_series.last_modified
+                                except exception.NoConfigException:
+                                    pass
+                        else:
+                            generate = True
                     except exception.MissingTagException:
+                        generate = True
+                    if generate:
+                        print("queue %s" % (generated))
                         queue(proc.id, generated)
 
         #self.__t.progress_end(30)
@@ -111,7 +118,7 @@ def run (self, tags):
                 self.__t.name(proc_def.name)
                 proc = process.get(proc_def)
                 result = proc.run(queued, self.__t)
-            schema.delete(queued)
+            schema.delete(queued) #TODO should we delete this on error?
 
         self.__t.ok()
 

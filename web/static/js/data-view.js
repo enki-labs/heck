@@ -1,5 +1,6 @@
 
-var tauApp = angular.module("tauApp", ["ngSanitize", "ngTagsInput", "ngGrid", "JSONedit"]);
+var tauApp = angular.module("tauApp", ["mgcrea.ngStrap", "ngSanitize", "ngTagsInput", "ngGrid", "JSONedit"]);
+//"ui.bootstrap", "ui.bootstrap.tooltip", "ui.bootstrap.popover"
 
 tauApp.controller("SeriesSummary", function ($scope, $http) {
     $http.get("api/summary").success(function(data) {
@@ -356,6 +357,12 @@ tauApp.controller("TaskStatus", function ($scope, $http, $interval) {
         } else { console.log("no filter"); }
     };
 
+    $scope.statusDetail = function (entity) {
+        return { "title": entity.name,
+                 "titlestyle": entity.status.toLowerCase(),
+                 "content": "<div class='status-detail'>" + JSON.stringify(entity.result) + "</div>" };
+    };
+
     $scope.gridHandler = function () {
         $scope.isEmptyObject = function (obj) { return $.isEmptyObject(obj); };
         $scope.statusLabel = function (status) {
@@ -391,9 +398,10 @@ tauApp.controller("TaskStatus", function ($scope, $http, $interval) {
                              ,{field: "",
                                displayName: "Progress",
                                width: "18%",
-                               cellTemplate: "<span class='cell-div' ng-if='row.entity.status!=\"PROGRESS\"'><span class='label' ng-class='statusLabel(row.entity.status)'>{{row.entity.status}}</span></span><div class='progress progress-striped active' ng-if='row.entity.status==\"PROGRESS\"' style='margin-top: 5px; margin-left: 20px; margin-right: 20px;'><div style='position: absolute; margin-left: 70px; margin-top: 0px; color: rgba(60, 60, 60, 0.95); font-size: 85%;'>{{row.entity.per_second}}/sec (about {{row.entity.estimate}})</div><div class='progress-bar' role='progressbar' aria-valuemin='0' aria-valuemax='100' style='width: {{row.entity.progress}}%'></div></div>"}
+                               cellTemplate: "<span class='cell-div' ng-if='row.entity.status!=\"PROGRESS\"'><span class='label' ng-class='statusLabel(row.entity.status)' data-animation='am-fade' data-html='true' data-container='body' bs-modal='statusDetail(row.entity)' data-template='status-modal.html'>{{row.entity.status}}</span></span><div class='progress progress-striped active' ng-if='row.entity.status==\"PROGRESS\"' style='margin-top: 5px; margin-left: 20px; margin-right: 20px;'><div style='position: absolute; margin-left: 70px; margin-top: 0px; color: rgba(60, 60, 60, 0.95); font-size: 85%;'>{{row.entity.per_second}}/sec (about {{row.entity.estimate}})</div><div class='progress-bar' role='progressbar' aria-valuemin='0' aria-valuemax='100' style='width: {{row.entity.progress}}%'></div></div>"}
                              ]
         };
+        //popover-placement='left' popover-unsafe-html='<div class=\"status-popover\">{{row.entity.result}}</div>' popover-trigger='mouseenter' popover-append-to-body='true'
         return $scope.gridOptions;
     };
 

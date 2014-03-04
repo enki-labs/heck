@@ -95,10 +95,10 @@ class TickWriter (Writer):
         row['filter_detail'] = filter_detail
         row.append()
 
-    def save (self):
-        """
-        Write new file to store.
-        """
-        if self._store:
-            self._store.save()
+    #def save (self):
+    #    """
+    #    Write new file to store.
+    #    """
+    #    if self._store:
+    #        self._store.save()
 

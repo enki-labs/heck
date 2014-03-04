@@ -176,6 +176,7 @@ class Config (object):
     def __init__ (self, config_yaml):
         """ Parse a yaml configuration string """
         configdef = yaml.safe_load(io.StringIO(config_yaml))         
+
         if "filters" not in configdef:
             configdef = dict(filters=[configdef])
 
@@ -186,10 +187,11 @@ class Config (object):
                          , volume_follows = False
                          , copy_last_price = False
                          , copy_last_volume = False
-                         , include_filters = []
+                         , qualifier_include_filters = []
+                         , qualifier_exclude_filters = []
                          , exclude_filters = [] )
 
-            if "filter" in definition:
+            if "filter" in definition and definition["filter"] != None:
                 for exclude_filter in definition["filter"]:
                     parts = exclude_filter.split(",")
                     if parts[0] == "floor":
@@ -201,26 +203,25 @@ class Config (object):
                     else:
                         raise Exception("Unknown filter (%s)" % (parts[0]))   
             
-            if "remove" in definition:
+            if "remove" in definition and definition["remove"] != None:
                 for exclude_filter in definition["remove"]:
-                    config.exclude_filters.append(QualifierFilter(exclude_filter))
+                    config.qualifier_exclude_filters.append(QualifierFilter(exclude_filter))
             
-            if "allow" in definition:
+            if "allow" in definition and definition["allow"] != None:
                 for include_filter in definition["allow"]:
-                    config.include_filters.append(QualifierFilter(include_filter))
+                    config.qualifier_include_filters.append(QualifierFilter(include_filter))
 
             if "volFollows" in definition: config.volume_follows = definition["volFollows"] 
-            if "copyLast" in definition:
+            if "copyLast" in definition and definition["copyLast"] != None:
                 config.copy_last_price = definition["copyLast"] 
                 config.copy_last_volume = definition["copyLast"] 
-            if "volumeLimit" in definition:
+            if "volumeLimit" in definition and definition["volumeLimit"] != None:
                 config.exclude_filters.append(CapFilter(definition["volumeLimit"], "volume"))
-            if "validFrom" in definition:
-                valid_from = definition["validFrom"]
-                if valid_from != None:
-                    valid_from.replace(tzinfo=pytz.utc)
-                    config.valid_from = common.Time.tick(valid_from)
-            if "weekTimezone" in definition:
+            if "validFrom" in definition and definition["validFrom"] != None:
+                valid_from = datetime.datetime.strptime(definition["validFrom"], "%Y-%m-%d %H:%M:%S")
+                valid_from.replace(tzinfo=pytz.utc)
+                config.valid_from = common.Time.tick(valid_from)
+            if "weekTimezone" in definition and definition["weekTimezone"] != None:
                 config.exclude_filters.append(WeekendFilter(definition["weekTimezone"], definition["weekEnd"], definition["weekStart"]))
 
             self._configs.append(config)
@@ -233,7 +234,7 @@ class Config (object):
         next_config = self._configs[self._config_index]
         self._config_index += 1
         if self._config_index < self._config_count:
-            return (next_config, self._config[self._config_index].valid_from)
+            return (next_config, self._configs[self._config_index].valid_from)
         else:
             return (next_config, None)
     
@@ -264,17 +265,18 @@ class Process (ProcessBase):
 
 
 
-    def run (self, queued):
+    def run (self, queued, progress):
         series = schema.select_one("series", schema.table.series.id==queued.depend[0])
-        tags = data.decode_tags(series.tags)
-        for name, value in self._add.items():
-            tags[name] = value
-        for name, value in self._remove.items():
-            if name in tags:
-                del tags[name]
+        tags = queued.tags_dict
+        #tags = data.decode_tags(series.tags)
+        #for name, value in self._add.items():
+        #    tags[name] = value
+        #for name, value in self._remove.items():
+        #    if name in tags:
+        #        del tags[name]
 
         #configs = Config(self._config)
-        configs = Config(self.get_config(tags))
+        configs = Config(self.get_config(tags).content)
 
         with data.get_reader(series) as reader:
             with data.get_writer(tags, 0, 0, create=True, append=False) as writer:
@@ -284,21 +286,16 @@ class Process (ProcessBase):
                 price_filter = NanFilter("price")
                 volume_filter = NanFilter("volume")
                 last_row = None
-                row_current = 0
-                row_total = reader._table.nrows 
+                progress.progress_end(reader._table.nrows)
 
                 for raw_row in reader._table: #TODO read_iter not working?
-
-                    row_current += 1
-                    if row_current % 100 == 0:
-                        self.progress(row_current, row_total)
-
+                    progress.progress()
                     row = Process.clone_row(raw_row)
                     if not event_filter.filter(row): continue
                     if last_row == None: last_row = row
 
                     if next_config and row["time"] > next_config:
-                        config, next_config = Config.get()
+                        config, next_config = configs.get()
 
                     if config.copy_last_price and np.isnan(row["price"]):
                         row["price"] = last_row["price"]
@@ -325,8 +322,9 @@ class Process (ProcessBase):
                     filter_reason = None
                     write_row = False
 
+                    # filter qualifiers
                     # include on first match
-                    for include_filter in config.include_filters:
+                    for include_filter in config.qualifier_include_filters:
                         if include_filter.filter(row) != None:
                             write_row = True
                             break
@@ -334,6 +332,14 @@ class Process (ProcessBase):
                     if not write_row:
                         # exclude on first match
                         write_row = True
+                        for exclude_filter in config.qualifier_exclude_filters:
+                            filter_reason = exclude_filter.filter(row)
+                            if filter_reason:
+                                write_row = False
+                                break
+
+                    if write_row:
+                        # exclude on first match
                         for exclude_filter in config.exclude_filters:
                             filter_reason = exclude_filter.filter(row)
                             if filter_reason:
@@ -352,5 +358,4 @@ class Process (ProcessBase):
                     last_row = row
 
                 writer.save()
-                return "% rows processed" % (row_total)
 

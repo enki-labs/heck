@@ -138,6 +138,9 @@ class StringDictionaryWrapper (object):
         if not getattr(target, attribute):
             setattr(target, attribute, "{}")
 
+    def items (self):
+        return self._parse().items()
+
     def _parse (self):
         """ Parse JSON serialized dictionary """
         return json.loads(getattr(self._target, self._attribute))

@@ -100,6 +100,7 @@ def get_writer (tags, first, last, create=True, overwrite=False, append=False):
     """
 
     from lib.data import ohlc
+    from lib.data import tick
     from datetime import datetime
 
     if "format" not in tags:

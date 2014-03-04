@@ -23,6 +23,23 @@ def test2 (self):
 
 @task(bind=True)
 @init_task
+def fix_series (self):
+    with self.__t.steps():
+        from lib import common
+        from lib import schema
+        from lib import data
+        with schema.select("series", schema.table.series.last_modified < 10) as items:
+            self.__t.progress_end(items.count())
+            for item in items.all():
+                self.__t.progress()
+                if item.last_modified < 10:
+                    with data.get_writer(data.decode_tags(item.tags), -10000000, -10000000, create=False, overwrite=False, append=True) as series:
+                        series.save()
+        self.__t.ok()     
+
+
+@task(bind=True)
+@init_task
 def update (self):
     """
     Check inbound file names/dates and queue

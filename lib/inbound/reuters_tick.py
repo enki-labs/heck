@@ -32,7 +32,7 @@ class PriceAdjustment (object):
             multiplier = self._adjustments[self._index]["multiplier"]
             self._index += 1
             if self._index < self._count:
-                next_time = adjustments[self._index]["start"]
+                next_time = self._adjustments[self._index]["start"]
 
         return (multiplier, next_time)
 
