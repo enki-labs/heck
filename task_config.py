@@ -7,7 +7,7 @@ CELERY_TASK_SERIALIZER = "json"
 CELERY_ALWAYS_EAGER = False
 #BROKER_POOL_LIMIT = None
 #BROKER_URL = "amqp://celery:pass@localhost:5672/task"
-BROKER_URL = "redis://localhost:6379/0"
+BROKER_URL = "redis://:jdk9dD0knn8md922XkdWQ980D9dkSD90S809dk@5.9.111.76:6379/0"
 BROKER_TRANSPORT_OPTIONS = { 'unacked_restore_limit': 0 }
 
 CELERY_IMPORTS = ("task.inbound", "task.process")
