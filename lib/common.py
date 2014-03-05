@@ -117,6 +117,23 @@ class Time (object):
     """ Tick times are in nanoseconds since 1970-01-01 """
 
     @staticmethod
+    def next_tick (period, from_tick):
+        """
+        Find the next tick for a given period.
+        """
+        tick_period = 0
+        if period == "second":
+            tick_period = Time.nano_per_second
+        return (from_tick + tick_period) - (from_tick % tick_period)
+
+    @staticmethod
+    def last_tick (period, from_tick):
+        tick_period = 0
+        if period == "second":
+            tick_period = Time.nano_per_second
+        return from_tick - (from_tick % tick_period)
+
+    @staticmethod
     def tick_parts (year, month, day, hour, minute, second, microsecond):
         """
         Tick time from date parts.

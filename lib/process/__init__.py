@@ -74,7 +74,6 @@ class ProcessBase (object):
         config = schema.select_one("config", schema.table.config.tags==config_tags_ids)
         if config == None:
             raise exception.NoConfigException(tags, self._config_keys)
-        print(config)
         return config                
 
     def _generate_multi (self):

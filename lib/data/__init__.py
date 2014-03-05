@@ -7,6 +7,7 @@ import time
 import exception
 import math
 from tables import *
+import pandas as pd
 from bisect import bisect_left
 from lib import common
 from lib import schema
@@ -23,6 +24,7 @@ def decode_tags (tag_ids):
             raise exception.MissingTagException("Tag id %s does not exist" % (tag_id))
         tags[tag.name] = tag.value
     return tags    
+
 
 def resolve_tags (tags, create):
     """
@@ -43,6 +45,48 @@ def resolve_tags (tags, create):
 
     return sorted(tagids) 
 
+
+class PandasReader (object):
+
+    def __init__ (self, series, path_type):
+        self._series = series
+        self._path_type = path_type
+        self._store = None
+        self._dataframe = None
+
+    @property
+    def df (self):
+        return self._dataframe
+
+    def __enter__ (self):
+        """
+        Open file and return reader.
+        """
+        self._store = common.store.read(common.Path.resolve_path(self._path_type, self._series), open_handle=False).__enter__()
+        self._dataframe = pd.read_hdf(self._store.local_path(), key="data")
+        self._dataframe = self._dataframe.set_index(pd.DatetimeIndex(pd.Series(self._dataframe["time"]).astype("datetime64[ns]"), tz="UTC"))
+        return self
+
+    def __exit__ (self, typ, value, tb):
+        """
+        Close underlying file.
+        """
+        if self._store: self._store.__exit__(None, None, None)
+
+
+def get_reader_pandas (series):
+    """
+    Open a store.
+    """
+    tags = decode_tags(series.tags)
+    if tags["format"] == "ohlc":
+        return PandasReader(series, "series_ohlc")
+    elif tags["format"] == "tick":
+        return PandasReader(series, "series_tick")
+    else:
+        raise Exception("Unknown series format %s" % (tags["format"]))
+
+
 def get_reader (series):
     """
     Open a store.
@@ -56,6 +100,7 @@ def get_reader (series):
         return tick.TickReader(series)
     else:
         raise Exception("Unknown series format %s" % (tags["format"]))
+
 
 def get_writer_lock (tags, create=True, overwrite=False, append=False):
     """
@@ -130,6 +175,7 @@ def get_writer (tags, first, last, create=True, overwrite=False, append=False):
         return tick.TickWriter(series, filters, first_tick, last_tick, overwrite=overwrite, append=append)
     else:
         raise Exception("Unknown series format %s" % (tags["format"]))
+
 
 def update_series (series, count, tick_start, tick_end):
     """

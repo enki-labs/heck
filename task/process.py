@@ -32,8 +32,6 @@ def generate (self):
 
         with schema.select("process") as select:
             for process_def in select.all():
-                if process_def.id != 7:
-                    continue
                 proc = process.get(process_def)
                 for generated in proc.generate():
                     generate = False
