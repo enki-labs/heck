@@ -80,6 +80,8 @@ class ProcessBase (object):
         """ Generate series on one in one out basis """
         include_tags_ids = data.resolve_tags(self._include, create=False)
         exclude_tags_ids = data.resolve_tags(self._exclude, create=False)
+        if len(exclude_tags_ids) == 0:
+            exclude_tags_ids = [0] #always match
         series = schema.table.series
         outputs = []
         with schema.select("series"

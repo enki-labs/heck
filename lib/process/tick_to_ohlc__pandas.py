@@ -3,7 +3,6 @@ from lib.process import DataFrameWrapper
 from lib.process import ProcessBase
 from lib import data
 from lib import schema
-from lib import common
 
 
 class Process (ProcessBase):
@@ -25,54 +24,7 @@ class Process (ProcessBase):
         series = schema.select_one("series", schema.table.series.id==queued.depend[0])
         resampled = False
 
-        tags = data.decode_tags(series.tags)
-        for name, value in self._add.items():
-            tags[name] = value
-        for name, value in self._remove.items():
-            if name in tags:
-                del[name]
-
-        with data.get_reader(series) as reader:
-
-            last_period = None
-            next_period = None
-            price_open = None
-            price_close = 0
-            price_high = 0
-            price_low = 0
-            volume = 0
-
-            with data.get_writer(tags, 0, 0, create=True, append=False) as writer:
-
-                for raw_row in reader._table:
-                
-                    if next_period and raw_row["time"] >= next_period:
-                        writer.add(next_period, price_open, price_high, price_low, price_close, volume, 0, 0, raw=True)
-                        next_period = common.Time.next_tick("second", raw_row["time"])
-                        last_period = common.Time.last_tick("second", raw_row["time"])
-                        price_open = None
-                        volume = 0
-                
-                    this_price = raw_row["price"]
-                    if price_open == None:
-                        price_open = this_price
-                        price_high = this_price
-                        price_low = this_price
-                    price_high = max(price_high, this_price)
-                    price_low = min(price_low, this_price)
-                    price_close = this_price
-                    volume += raw_row["volume"]
-                    
-                    if next_period == None:
-                        next_period = common.Time.next_tick("second", raw_row["time"])
-                        last_period = common.Time.last_tick("second", raw_row["time"])
-
-                if price_open != None: #flush last
-                    writer.add(next_period, price_open, price_high, price_low, price_close, volume, 0, 0, raw=True)
-
-                writer.save()
-
-        """
+        with data.get_reader_pandas(series) as reader:
             ohlc_sampler = { "price": ["first", "max", "min", "last"],
                          "volume": "sum" }
             resampled_out = reader.df[reader.df["filter_class"]==""].resample(self._params["period"], how=ohlc_sampler).dropna()
@@ -105,6 +57,4 @@ class Process (ProcessBase):
         else:
             with data.get_writer(tags, 0, 0, create=True, append=False) as writer:
                 writer.save()
-        """
-
              

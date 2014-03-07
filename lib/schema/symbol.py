@@ -15,6 +15,7 @@ def table (base):
         category = Column(types.Unicode(1000))
         name = Column(types.Unicode(1000))
         meta = Column(types.UnicodeText(), default="{}")
+        last_modified = Column(types.BigInteger, default = -1)
 
         def meta_dict (self):
             if self.meta:
@@ -43,6 +44,23 @@ def table (base):
         def __repr__ (self):
             return "<series(symbol='%s', meta='%s')>" % (
                    self.symbol, self.meta)
+
+        def to_dict (self):
+            return {"symbol": self.symbol
+                   ,"category": self.category
+                   ,"name": self.name
+                   ,"meta": self.meta_dict()
+                   ,"last_modified": self.last_modified}
+
+        def from_dict (dictionary):
+            from lib.schema import StringDictionaryWrapper
+            output = table_def()
+            output.symbol = dictionary["symbol"]
+            output.category = dictionary["category"]
+            output.name = dictionary["name"]
+            StringDictionaryWrapper(output, "meta")._encode(dictionary["meta"])
+            output.last_modified = dictionary["last_modified"]
+            return output
 
     return table_def
 

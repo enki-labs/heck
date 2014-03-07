@@ -15,6 +15,7 @@ def table (base):
         source = Column(types.Unicode(255), primary_key=True)
         resolve = Column(types.Unicode(255))
         adjust = Column(types.UnicodeText(), default="{}")
+        last_modified = Column(types.BigInteger, default = -1)
 
         def adjust_dict (self):
             if self.adjust:
@@ -46,6 +47,23 @@ def table (base):
         def __repr__ (self):
             return "<symbol_resolve(symbol='%s', source='%s', resolve='%s', adjust='%s')>" % (
                    self.symbol, self.source, self.resolve, self.adjust)
+
+        def to_dict (self):
+            return {"symbol": self.symbol
+                   ,"source": self.source
+                   ,"resolve": self.resolve
+                   ,"adjust": self.adjust_dict()
+                   ,"last_modified": self.last_modified}
+
+        def from_dict (dictionary):
+            from lib.schema import StringDictionaryWrapper
+            output = table_def()
+            output.symbol = dictionary["symbol"]
+            output.source = dictionary["source"]
+            output.resolve = dictionary["resolve"]
+            StringDictionaryWrapper(output, "adjust")._encode(dictionary["adjust"])
+            output.last_modified = dictionary["last_modified"]
+            return output
 
     return table_def
 

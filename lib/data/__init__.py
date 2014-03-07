@@ -33,15 +33,20 @@ def resolve_tags (tags, create):
     tagids = []
 
     for name, value in tags.items():
-        tag = schema.select_one("tag", schema.table.tag.name==name, schema.table.tag.value==value)
-        if not tag and not create:
-            raise exception.MissingTagException("Tag %s (%s) does not exist" % (name, value))
-        elif not tag:
-            tag = schema.table.tag()
-            tag.name = name
-            tag.value = value
-            schema.save(tag)
-        tagids.append(tag.id)
+        if value == "*": #return any with name
+            with schema.select("tag", schema.table.tag.name==name) as select:
+                for selected in select.all():
+                    tagids.append(selected.id) 
+        else:
+            tag = schema.select_one("tag", schema.table.tag.name==name, schema.table.tag.value==value)
+            if not tag and not create:
+                raise exception.MissingTagException("Tag %s (%s) does not exist" % (name, value))
+            elif not tag:
+                tag = schema.table.tag()
+                tag.name = name
+                tag.value = value
+                schema.save(tag)
+            tagids.append(tag.id)
 
     return sorted(tagids) 
 

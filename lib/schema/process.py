@@ -22,15 +22,15 @@ def table (base):
 
         @property
         def search_dict (self):
+            from lib.schema import StringDictionaryWrapper
             if not self._search_dict:
-                from lib.schema import StringDictionaryWrapper
                 self._search_dict = StringDictionaryWrapper(self, "search")
             return self._search_dict
 
         @property
         def output_dict (self):
+            from lib.schema import StringDictionaryWrapper
             if not self._output_dict:
-                from lib.schema import StringDictionaryWrapper
                 self._output_dict = StringDictionaryWrapper(self, "output")
             return self._output_dict
 
@@ -47,12 +47,13 @@ def table (base):
                    ,"last_modified": self.last_modified}
 
         def from_dict (dictionary):
+            from lib.schema import StringDictionaryWrapper
             output = table_def()
             output.id = dictionary["id"]
             output.name = dictionary["name"]
             output.processor = dictionary["processor"]
-            StringDictionaryWrapper(output, "search").encode(dictionary["search"])
-            StringDictionaryWrapper(output, "output").encode(dictionary["output"])
+            StringDictionaryWrapper(output, "search")._encode(dictionary["search"])
+            StringDictionaryWrapper(output, "output")._encode(dictionary["output"])
             output.last_modified = dictionary["last_modified"]
             return output
 

@@ -32,6 +32,7 @@ def generate (self):
 
         with schema.select("process") as select:
             for process_def in select.all():
+                if process_def.id != 8: continue
                 proc = process.get(process_def)
                 for generated in proc.generate():
                     generate = False
@@ -44,7 +45,7 @@ def generate (self):
                                 try:
                                     config = proc.get_config(generated["output_tags"])
                                     generate = config.last_modified > generated_series.last_modified
-                                except exception.NoConfigException:
+                                except (exception.NoConfigException, exception.NoConfigKeyException):
                                     pass
                         else:
                             generate = True
