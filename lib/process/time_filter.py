@@ -53,7 +53,7 @@ class Process (ProcessBase):
     def run (self, queued, progress):
         print(queued)
         series = schema.select_one("series", schema.table.series.id==queued.depend[0])
-        filtered = None
+        filtered_data = False
 
         #tags = data.decode_tags(series.tags)
         #for name, value in self._add.items():
@@ -88,10 +88,9 @@ class Process (ProcessBase):
                         for row in filtered.to_records():
                             writer.add(row[0], row["open"], row["high"], row["low"], row["close"], row["volume"], row["openInterest"])
                         writer.save()
-                else:
-                    filtered = None
+                        filtered_data = True
 
-        if not filtered:
+        if not filtered_data:
             with data.get_writer(tags, 0, 0, create=True, append=False) as writer:
                 writer.save()
              
