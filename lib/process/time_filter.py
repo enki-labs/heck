@@ -79,7 +79,7 @@ class Process (ProcessBase):
                 raise Exception("Unknown mode parameter %s" % self._params["mode"])
 
             with data.get_reader_pandas(series) as reader:
-                filtered = reader.df.tz_convert(pytz.timezone(timezone)).between_time(open_time, close_time).dropna()
+                filtered = reader.df.tz_convert(pytz.timezone(timezone)).between_time(open_time, close_time).dropna().tz_convert(pytz.UTC)
 
                 if len(filtered) > 0:
                     first = filtered.head(1).index[0].value
