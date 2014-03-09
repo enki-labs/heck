@@ -1,7 +1,6 @@
 
 import argparse
 import json
-import yaml
 from twisted.internet import reactor
 from twisted.web.server import Site
 from twisted.web.resource import Resource
@@ -12,6 +11,7 @@ import memcache
 from sqlalchemy import func
 from sqlalchemy import distinct
 from sqlalchemy import desc
+from sqlalchemy.sql import and_
 import celery
 import redis
 from datetime import timedelta
@@ -56,25 +56,21 @@ class Data (Resource):
  
     def render_GET (self, request):
         series = schema.table.series
-        print(request.args)
 
         response = dict(data=[], volume=[], adj=[], tstart=0, tend=0, istart=0, iend=0)
 
         with schema.select("series", series.id==int(request.args[b"id"][0].decode("utf-8"))) as select:
             with data.get_reader(select.first()) as reader: 
-                rows = reader._table.nrows
+                rows = reader.count()
                 from_index = max(0, int(request.args[b"start"][0].decode("utf-8"))) if b"start" in request.args else 0
                 to_index = min(int(request.args[b"end"][0].decode("utf-8")), rows) if b"end" in request.args else rows
                 from_time = int(request.args[b"starttime"][0].decode("utf-8")) if b"starttime" in request.args else None
                 read_format = request.args[b"format"][0].decode("utf-8")
-                print(read_format, from_time)
 
                 if from_time:
                     diff = to_index - from_index
                     from_index = reader.nearest(from_time)
-                    print(common.Time.time(from_time), from_index)
                     to_index = from_index + diff
-                    print("adjusted from", from_index, to_index)
 
                 if read_format == "ohlcv":
                     for row in reader.read(start=from_index, stop=to_index):
@@ -94,6 +90,7 @@ class Data (Resource):
  
                 elif read_format == "tick":
                     filtered = None
+                    common.log.info("read tick %s to %s" % (from_index, to_index))
                     for row in reader.read_noindex(start=from_index, stop=to_index):
                         if filtered == None:
                             filtered = ("filter_class" in row.table.colnames)
@@ -123,10 +120,11 @@ class Data (Resource):
                         response["tend"] = response["data"][-1][0]
                         response["istart"] = int(from_index)
                         response["iend"] = int(to_index)
-            
+        
+        common.log.info("write result")
         request.setHeader(b'Content-Type', b'text/json')
         request.write(json.dumps(response).encode())
-        print("done")
+        common.log.info("write complete")
         return b""            
 
     def getChild (self, name, request):
@@ -226,7 +224,7 @@ class Summary (Resource):
 
             with schema.select("series", series.id==int(request.args[b"id"][0].decode("utf-8"))) as select:
                 with data.get_reader(select.first()) as reader:
-                    rows = reader._table.nrows
+                    rows = reader.count()
                     read_format = request.args[b"format"][0].decode("utf-8")
                     resolution = int(request.args[b"resolution"][0].decode("utf-8"))
 
@@ -382,19 +380,32 @@ class Task (Resource):
                 tags = data.resolve_tags(item_filter, create=False)
                 with schema.select("config", schema.table.config.tags.contains(tags)) as items:
                     for row in items.limit(100).all():
+                        print(row.tags)
                         rowdict = row.to_dict()
-                        rowdict["content"] = yaml.load(rowdict["content"])
+                        rowdict["content"] = json.loads(rowdict["content"])
                         rowdict["tags"] = data.decode_tags(rowdict["tags"])
                         result.append(rowdict)
             elif item == "process":
                 result = []
-                print(item_filter)
-                import sys
-                sys.stdout.flush()
                 with schema.select(item, schema.table.process.name.ilike("%%%s%%" % item_filter["name"]), 
                                          schema.table.process.processor.ilike("%%%s%%" % item_filter["processor"])) as items:
-                    for row in items.limit(100).all():
+                    for row in items.order_by(schema.table.process.name).limit(100).all():
                         result.append(row.to_dict())
+            elif item == "symbol":
+                result = []
+                with schema.select(item, schema.table.symbol.symbol.ilike("%%%s%%" % item_filter["symbol"]),
+                                         schema.table.symbol.category.ilike("%%%s%%" % item_filter["category"]),
+                                         schema.table.symbol.name.ilike("%%%s%%" % item_filter["name"])) as items:
+                    for row in items.order_by(schema.table.symbol.symbol).limit(100).all():
+                        result.append(row.to_dict())
+            elif item == "symbol_resolve":
+                result = []
+                with schema.select(item, schema.table.symbol_resolve.symbol.ilike("%%%s%%" % item_filter["symbol"]),
+                                         schema.table.symbol_resolve.source.ilike("%%%s%%" % item_filter["source"]),
+                                         schema.table.symbol_resolve.resolve.ilike("%%%s%%" % item_filter["resolve"])) as items:
+                    for row in items.order_by(schema.table.symbol.symbol).limit(100).all():
+                        result.append(row.to_dict())
+
         elif action == "delete":
             item = request.args[b"item"][0].decode("utf-8")
             target = json.loads(request.args[b"target"][0].decode("utf-8"))
@@ -403,19 +414,26 @@ class Task (Resource):
                 item_schema = schema.table.config
             elif item == "process":
                 item_schema = schema.table.process
+            elif item == "symbol": #TODO add id
+                symbols = []
+                for target_symbol in target:
+                    symbols.append(target_item["symbol"])
+                schema.delete_query("symbol", schema.table.symbol.in_(symbols))
+            elif item == "symbol_resolve": #TODO add id
+                for target_item in target:
+                    schema.delete_query("symbol_resolve", and_(schema.table.symbol_resolve.symbol==target_item["symbol"], schema.table.symbol_resolve.source==target_item["source"]))
             if item_schema:
                 ids = []
                 for target_item in target:
                     ids.append(target_item["id"])
-                with schema.query(item, item_schema.id.in_(ids)) as del_query:
-                    del_query.delete()
+                schema.delete_query(item, item_schema.id.in_(ids))
         elif action == "save":
             item = request.args[b"item"][0].decode("utf-8")
             target = json.loads(request.args[b"target"][0].decode("utf-8"))
             if item == "config":
                 for target_item in target:
                     target_item["tags"] = data.resolve_tags(target_item["tags"], create=True)
-                    target_item["content"] = yaml.dump(target_item["content"])
+                    target_item["content"] = json.dumps(target_item["content"])
                     target_item["last_modified"] = common.Time.tick()
                     if target_item["id"]: #TODO how to upsert with SQLAlchemy if id set by init?
                         get_item = schema.select_one("config", schema.table.config.id==target_item["id"])
@@ -427,6 +445,7 @@ class Task (Resource):
                         schema.save(schema.table.config.from_dict(target_item))
             elif item == "process":
                 for target_item in target:
+                    print(target_item)
                     target_item["last_modified"] = common.Time.tick()
                     if target_item["id"]: #TODO how to upsert with SQLAlchemy if id set by init?
                         get_item = schema.select_one("process", schema.table.process.id==target_item["id"])
@@ -439,8 +458,28 @@ class Task (Resource):
                         schema.save(get_item)
                     else:
                         schema.save(schema.table.process.from_dict(target_item))
-            #import sys
-            #sys.stdout.flush()
+            elif item == "symbol":
+                for target_item in target:
+                    existing = schema.select_one("symbol", schema.table.symbol.symbol==target_item["symbol"])
+                    target_item["last_modified"] = common.Time.tick()
+                    if existing:
+                        existing.category = target_item["category"]
+                        existing.meta = json.dumps(target_item["meta"])
+                        existing.last_modified = target_item["last_modified"]
+                        schema.save(existing)
+                    else:
+                        schema.save(schema.table.symbol.from_dict(target_item))
+            elif item == "symbol_resolve":
+                for target_item in target:
+                    target_item["last_modified"] = common.Time.tick()
+                    existing = schema.select_one("symbol_resove", and_(schema.table.symbol_resolve.symbol==target_item["symbol"], schema.table.symbol_resolve.source==target_item["source"]))
+                    if existing:
+                        existing.resolve = target_item["resolve"]
+                        existing.adjust = json.dumps(target_item["adjust"])
+                        existing.last_modified = target_item["last_modified"]
+                        schema.save(existing)
+                    else:
+                        schema.save(schema.table.symbol_resolve.from_dict(target_item))
         elif action == "progress":
             result["task"] = []
             #TODO does the Celery API support listing tasks in DB backend?
@@ -452,6 +491,8 @@ class Task (Resource):
         
         request.setHeader(b'Content-Type', b'text/json')
         request.write(json.dumps(result).encode())
+        import sys
+        sys.stdout.flush()
         return b""
 
 class Api (Resource):
@@ -519,13 +560,14 @@ parser.add_argument("--celery_tables", type=json.loads, help='Celery DB table na
 args = parser.parse_args()
 
 celery_client = celery.Celery()
+print(args.celery_broker)
 celery_client.config_from_object({"BROKER_URL": args.celery_broker,
                   "CELERY_RESULT_BACKEND": "database",
                   "CELERY_RESULT_DBURI": args.celery_backend,
                   "CELERY_RESULT_DB_TABLENAMES": args.celery_tables})
 
 memcache = memcache.Client(['127.0.0.1:11211'], debug=0)
-redis_client = redis.StrictRedis(host='localhost', port=6379, db=0)
+redis_client = redis.StrictRedis(host='localhost', port=6379, db=0, password=args.celery_pass)
 
 res = Index(args)
 factory = Site(res)

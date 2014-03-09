@@ -34,12 +34,24 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
         summary: null
     };
 
+    $scope.selectPoint = function (point) {
+        if ($scope.gridOptions)
+        {
+            $scope.gridOptions.selectItem(point.index, true);
+            $scope.gridOptions.ngGrid.$viewport.scrollTop(Math.max(0, (point.index - 6))*$scope.gridOptions.ngGrid.config.rowHeight);
+        }
+    };
+
     $scope.refresh = function () {
         $scope.state.refresh = true;
     };
 
     $scope.closeView = function ($index) {
         $rootScope.$broadcast("view-series-remove", $index);
+    };
+
+    $scope.unzoom = function () {
+        $scope.$broadcast("unzoom");
     };
 
     $scope.start = function () {
@@ -57,12 +69,9 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
         $scope.refresh();
     };
 
-    $scope.unzoom = function () {
-        console.log("unzoom");
-    };
-
-    $scope.toggle = function () {
-        if ($scope.state.view == "plot") { $scope.state.view = "grid"; }
+    $scope.toggle = function (both) {
+        if (both) { $scope.state.view = "plot_grid"; }
+        else if ($scope.state.view == "plot") { $scope.state.view = "grid"; }
         else { $scope.state.view = "plot"; }
     };
 
@@ -161,7 +170,7 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
                 yAxis: 1
             }],
             xAxis: {  
-                events: {setExtremes: $scope.setZoom},
+                //events: {setExtremes: $scope.setZoom},
                 minRange: 1,
                 plotBands: []
             },
@@ -188,12 +197,17 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
     $scope.plotTick = function (renderTarget, attrs, series, updateFunction) {
 
         var indata = [];
-
+        var index = 0;
         $scope.state.data.data.forEach(function (tick) {
             if (tick[6] != "") {
-                indata.push({x:tick[0], y:tick[1], marker: { radius: 2, fillColor: "red" }});
-            } else { indata.push({x:tick[0], y:tick[1], marker: { enabled: false }}); }
+                indata.push({x:tick[0], y:tick[1], f: tick[6], fd: tick[7], index: index, marker: { radius: 2, fillColor: "red" }});
+            } else { indata.push({x:tick[0], y:tick[1], f: tick[6], fd: tick[7], index: index, marker: { enabled: false }}); }
+            index += 1;
         });
+
+        //$scope.selectPoint = function (point) {
+        //    $scope.$broadcast("selectpoint", point.index); 
+        //};
 
         var options = {
             credits: { enabled: false },
@@ -220,7 +234,9 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
             },
             tooltip: {
                 valueDecimals: 6,
-                xDateFormat: "%Y-%m-%d %H:%M:%S%L"
+                xDateFormat: "%Y-%m-%d %H:%M:%S%L",
+                pointFormat: "<div><b>{series.name}</b> {point.y} {point.f} {point.fd}</div><br />",
+                style: { fontSize: '10px' }
             },
             scrollbar : {
                 enabled: false
@@ -229,7 +245,8 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
                 type: "line",
                 name: "Price",
                 data : indata,
-                dataGrouping : { enabled: false }
+                dataGrouping : { enabled: false },
+                point: { events: { click: function () { $scope.selectPoint(this); } } }
             },
             {  
                 type: "column",
@@ -276,7 +293,7 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
     $scope.gridHandler = function (series) { //(renderTarget, attrs, series, updateFunction) {
         if (series.tags.format == "tick")
         {
-            return { data: "state.data.data", 
+            $scope.gridOptions = { data: "state.data.data", 
                      enableSorting: false,
                      enableColumnResize: true,
                      rowHeight: 20,
@@ -293,7 +310,7 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
         }
         else
         {
-            return { data: "state.data.data",
+            $scope.gridOptions = { data: "state.data.data",
                      enableSorting: false,
                      enableColumnResize: true,
                      rowHeight: 20,
@@ -306,6 +323,7 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
                                  ]
                    };
         }
+        return $scope.gridOptions;
     };
 
     $scope.refresh();
@@ -538,6 +556,102 @@ tauApp.controller("TaskConfiguration", function ($scope, $http, $q) {
     };
 });
 
+tauApp.controller("Symbol", function ($scope, $http) {
+
+    $scope.searchSymbol = "";
+    $scope.searchName = "";
+    $scope.searchCategory = "";
+    $scope.items = [];
+    $scope.gridOptions = {};
+    $scope.showJsonEdit = false;
+
+    $scope.search = function () {
+        var params = { params: { action: "list", item: "symbol", filter: JSON.stringify({symbol: $scope.searchSymbol, category: $scope.searchCategory, name: $scope.searchName}) } };
+        $http.get("api/task", params).success(function(data) {
+            $scope.items = data;
+        });
+    };
+
+    $scope.add = function (clone) {
+        if (clone) {
+            if ($scope.gridOptions.selectedItems.length > 0) {
+                var newItem = $.extend(true, {}, $scope.gridOptions.selectedItems[0]);
+                newItem.symbol = "";
+                newItem.last_modified = 0;
+                $scope.items.splice(0, 0, newItem);
+            }
+        }
+        else {
+            $scope.items.splice(0, 0, {symbol: "", category: "", name: "", meta: {}, last_modified: 0});
+        }
+    };
+
+    $scope.editJson = function (row, field) {
+        $scope.jsonField = field;
+        $scope.jsonValue = $.extend(true, {}, row.entity[field]);
+        $scope.jsonEntity = row.entity;
+        $scope.showJsonEdit = true;
+    };
+
+    $scope.saveValue = function (ok, scope, value) {
+        scope.$emit('ngGridEventEndCellEdit');
+        if (ok) {
+            scope.$parent.row.entity[scope.$parent.col.field] = value;
+            $scope.save(scope.$parent.row.entity);
+        }
+    };
+
+    $scope.saveJson = function (scope, ok) {
+        if (ok) {
+            $scope.jsonEntity[$scope.jsonField] = $scope.jsonValue;
+            $scope.save($scope.jsonEntity);
+        }
+        $scope.showJsonEdit = false;
+    };
+
+    $scope.save = function (entity) {
+        var params = { params: { action: "save", item: "symbol", target: JSON.stringify([entity]) } };
+        $http.get("api/task", params).success(function(data) {
+        });
+    };
+    
+    $scope.grid = function () {
+        $scope.isEmptyObject = function (obj) { return $.isEmptyObject(obj); };
+        $scope.gridOptions = { data: "items",
+                 selectedItems: [],
+                 enableSorting: false,
+                 enableColumnResize: true,
+                 enableRowSelection: true,
+                 canSelectRows: true,
+                 rowHeight: 40,
+                 columnDefs: [{field: "symbol",
+                               displayName: "Symbol",
+                               cellTemplate: "<span class='small-text'>{{row.entity.symbol.length ? row.entity.symbol : 'double click to edit'}}</span>",
+                               enableCellEdit: true,
+                               width: "20%",
+                               editableCellTemplate: "<div cell-input model='row.entity.symbol' save='saveValue'></div>"
+                              }
+                             ,{field: "category",
+                               displayName: "Category",
+                               cellTemplate: "<span class='small-text'>{{row.entity.category.length ? row.entity.category : 'double click to edit'}}</span>",
+                               enableCellEdit: true,
+                               width: "30%",
+                               editableCellTemplate: "<div cell-input model='row.entity.category' save='saveValue'></div>"
+                              }
+                             ,{field: "meta",
+                               displayName: "Meta",
+                               width: "30%",
+                               cellTemplate: "<span class='small-text' ng-if='isEmptyObject(row.entity.meta)' ng-dblclick='editJson(row,\"meta\")'>double click to edit</span><span class='truncate small-text' ng-if='!isEmptyObject(row.entity.meta)' ng-dblclick='editJson(row,\"meta\")'>{{row.entity.meta}}</span>"}
+                             ,{field: "last_modified",
+                               displayName: "Last Modified",
+                               width: "20%",
+                               cellTemplate: "<div cell-ticktime class='small-text' value=row.entity.last_modified></div>"}
+                             ]
+        };
+        return $scope.gridOptions;
+    };
+});
+
 tauApp.controller("TaskProcess", function ($scope, $http) {
 
     $scope.searchName = "";
@@ -701,11 +815,15 @@ tauApp.directive('stock', function () {
 
             Highcharts.setOptions({ global : { useUTC : true } });
 
+            scope.$on('unzoom', function (ev) {
+                    scope.chart.zoomOut();
+                });
+
             scope.$watch( function () { return scope.watcher }, function (value) {
                 if (!value) return;
 
                 scope.handler(element[0], attrs, scope.series, function (options) {
-                    var chart = new Highcharts.StockChart(options);
+                    scope.chart = new Highcharts.StockChart(options);
                 });                
             });
         }

@@ -59,6 +59,15 @@
                             </ul>
                         </div>
                     </div>
+                    <div class="panel">
+                        <div class="panel-header">Metadata</div>
+                        <div class="panel-inner">
+                            <ul class="nav nav-pills nav-stacked">
+                                <li class="active"><a href="#" ng-click="show('symbol')"><i class="fa fa-key icon-white"></i> Symbol</a></li>
+                                <li class="active"><a href="#" ng-click="show('series-mapping')"><i class="fa fa-compass icon-white"></i> Series Mapping</a></li>
+                            </ul>
+                        </div>
+                    </div>
                 </div>
                 
                 <div class="col-md-10">
@@ -147,6 +156,81 @@
                                 </div>
                             </div>
                             <div style="height: 100%;" ng-grid="gridHandler()"></div>
+                        </div>
+                    </div>
+                    <div class="panel" ng-if="view == 'symbol'" ng-controller="Symbol">
+                        <div class="panel-header">Symbol</div>
+                        <div class="panel-control">
+                            <div class="input-group" style="float:left; margin-right: 10px;">
+                                <span class="input-group-addon">Symbol</span><input class="tag-search" type="text" ng-model="searchSymbol" placeholder="" />
+                            </div>
+                            <div class="input-group" style="float:left; margin-right: 10px;">
+                                <span class="input-group-addon">Name</span><input class="tag-search" type="text" ng-model="searchName" placeholder="" />
+                            </div>
+                            <div style="float:left; margin-right: 10px;">
+                                <a class="btn btn-primary btn-xs" href="#" ng-click="search()">
+                                    <i class="fa fa-search icon-white"></i> Search</a>
+                            </div>
+                            <div style="margin-left: 10px; float: left;">
+                                    <a class="btn btn-primary btn-xs" href="#" ng-click="add(false)">
+                                        <i class="fa fa-plus-square icon-white"></i> New Symbol</a>
+                                </div>
+                                <div style="margin-left: 10px; float: left;">
+                                    <a class="btn btn-primary btn-xs" href="#" ng-click="add(true)">
+                                        <i class="fa fa-pencil-square icon-white"></i> Clone Selected</a>
+                                </div>
+                                <div style="margin-left: 10px; float: left;">
+                                    <a class="btn btn-primary btn-xs" href="#" ng-click="delete()">
+                                        <i class="fa fa-minus-square icon-white"></i> Delete Selected</a>
+                                </div>
+                            <br style="clear: both;" />
+                        </div>
+                        <div class="panel-inner" style="height: 500px;">
+                            <div style="position:fixed; height: 500px; width: 81%; overflow-y: scroll; background: white; z-index: 100;" ng-if="showJsonEdit">
+                                <div class="jsonView" style="width: 80%;">
+                                    <json child="jsonValue" type="'object'" save="saveJson"></json>
+                                </div>
+                            </div>
+                            <div style="height: 100%;" ng-grid="grid()"></div>
+                        </div>
+                    </div>
+                    <div class="panel" ng-if="view == 'symbol-mapping'" ng-controller="SymbolMapping">
+                        <div class="panel-header">Symbol</div>
+                        <div class="panel-control">
+                            <div class="input-group" style="float:left; margin-right: 10px;">
+                                <span class="input-group-addon">Symbol</span><input class="tag-search" type="text" ng-model="searchSymbol" placeholder="" />
+                            </div>
+                            <div class="input-group" style="float:left; margin-right: 10px;">
+                                <span class="input-group-addon">Mapped Symbol</span><input class="tag-search" type="text" ng-model="searchMappedSymbol" placeholder="" />
+                            </div>
+                            <div class="input-group" style="float:left; margin-right: 10px;">
+                                <span class="input-group-addon">Provider</span><input class="tag-search" type="text" ng-model="searchProvider" placeholder="" />
+                            </div>
+                            <div style="float:left; margin-right: 10px;">
+                                <a class="btn btn-primary btn-xs" href="#" ng-click="search()">
+                                    <i class="fa fa-search icon-white"></i> Search</a>
+                            </div>
+                            <div style="margin-left: 10px; float: left;">
+                                    <a class="btn btn-primary btn-xs" href="#" ng-click="add(false)">
+                                        <i class="fa fa-plus-square icon-white"></i> New Symbol</a>
+                                </div>
+                                <div style="margin-left: 10px; float: left;">
+                                    <a class="btn btn-primary btn-xs" href="#" ng-click="add(true)">
+                                        <i class="fa fa-pencil-square icon-white"></i> Clone Selected</a>
+                                </div>
+                                <div style="margin-left: 10px; float: left;">
+                                    <a class="btn btn-primary btn-xs" href="#" ng-click="delete()">
+                                        <i class="fa fa-minus-square icon-white"></i> Delete Selected</a>
+                                </div>
+                            <br style="clear: both;" />
+                        </div>
+                        <div class="panel-inner" style="height: 500px;">
+                            <div style="position:fixed; height: 500px; width: 81%; overflow-y: scroll; background: white; z-index: 100;" ng-if="showJsonEdit">
+                                <div class="jsonView" style="width: 80%;">
+                                    <json child="jsonValue" type="'object'" save="saveJson"></json>
+                                </div>
+                            </div>
+                            <div style="height: 100%;" ng-grid="grid()"></div>
                         </div>
                     </div>
                 </div>

@@ -88,6 +88,7 @@
                                 <button class="btn btn-primary btn-xs" type="button" ng-click="end()"><i class="fa fa-fast-forward icon-white"></i></button>
                                 <button class="btn btn-primary btn-xs" type="button" ng-click="unzoom()"><i class="fa fa-search-minus icon-white"></i></button>
                                 <button class="btn btn-primary btn-xs" type="button" ng-click="toggle()"><i class="fa fa-eye icon-white"></i></button>
+                                <button class="btn btn-primary btn-xs" type="button" ng-click="toggle(true)"><i class="fa fa-eye-slash icon-white"></i></button>
                                 <div class="input-group">
                                     <span class="input-group-addon">
                                     <i class="fa fa-calendar icon-white"></i> date
@@ -96,8 +97,8 @@
                             </div>
                         </div>
                         <div class="panel-inner">
-                            <stock ng-if="state.view == 'plot'" series="instance" handler="plotHandler" watcher="state.data" height="500"></stock>
-                            <div class="price-grid" style="height: 500px;" ng-if="state.view == 'grid'" ng-grid="gridHandler(instance)"></div>
+                            <stock ng-if="state.view == 'plot' || state.view == 'plot_grid'" series="instance" handler="plotHandler" watcher="state.data" height="500"></stock>
+                            <div class="price-grid" style="height: 500px;" ng-if="state.view == 'grid' || state.view == 'plot_grid'" ng-grid="gridHandler(instance)"></div>
                         </div>
                     </div>
                 </div>

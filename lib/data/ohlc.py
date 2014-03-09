@@ -24,6 +24,17 @@ class OhlcDescription (IsDescription):
     actual          = Float64Col()
 
 
+def adjuster (row, adjustment):
+    return {"time": row["time"],
+            "open": row["open"] + adjustment,
+            "high": row["high"] + adjustment,
+            "low": row["low"] + adjustment,
+            "close": row["close"] + adjustment,
+            "volume": row["volume"],
+            "openInterest": row["openInterest"],
+            "actual": row["actual"]}
+
+
 class OhlcReader (Reader):
     """
     Read an OHLC data store.

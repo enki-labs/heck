@@ -84,7 +84,9 @@ def get_reader_pandas (series):
     Open a store.
     """
     tags = decode_tags(series.tags)
-    if tags["format"] == "ohlc":
+    if "compute" in tags:
+        raise Exception("Compute not supported for Pandas")
+    elif tags["format"] == "ohlc":
         return PandasReader(series, "series_ohlc")
     elif tags["format"] == "tick":
         return PandasReader(series, "series_tick")
@@ -98,8 +100,11 @@ def get_reader (series):
     """
     from lib.data import ohlc
     from lib.data import tick
+    from lib.data import compute
     tags = decode_tags(series.tags)
-    if tags["format"] == "ohlc":
+    if "compute" in tags:
+        return compute.ComputeReader(series, tags)
+    elif tags["format"] == "ohlc":
         return ohlc.OhlcReader(series)
     elif tags["format"] == "tick":
         return tick.TickReader(series)
@@ -114,6 +119,9 @@ def get_writer_lock (tags, create=True, overwrite=False, append=False):
 
     from lib.data import ohlc
     from datetime import datetime
+
+    if "compute" in tags:
+        raise Exception("Computed series cannot be written to")
 
     if "format" not in tags:
         raise Exception("Format is a required series tag")
@@ -204,6 +212,14 @@ class Reader (object):
         self._store = None
         self._file = None
         self._table = None
+
+
+    def count (self):
+        """
+        Return total row count.
+        """
+        return self._table.nrows
+
 
     def nearest (self, timet):
         """

@@ -24,16 +24,19 @@ class DataFrameWrapper (object):
         self.series = series
         with data.get_reader(series) as reader:
             step = 1
-            if resolution > 0 and reader._table.nrows > resolution:
-                step = int(reader._table.nrows / resolution)
+            if resolution > 0 and reader.count() > resolution:
+                step = int(reader.count() / resolution)
             
-            datatable = reader.read(step=step, no_index=no_index)
+            datatable = []
+            times = []
+            for row in reader.read_iter(step=step):#, no_index=no_index):
+                datatable.append(row)
+                times.append(row["time"])
             self.dframe = pd.DataFrame.from_records(
                          datatable 
                        , index=pd.DatetimeIndex(
-                               pd.Series(datatable["time"]).astype("datetime64[ns]")
+                               pd.Series(times).astype("datetime64[ns]")
                        , tz="UTC"))
-
 
 
 class ProcessBase (object):

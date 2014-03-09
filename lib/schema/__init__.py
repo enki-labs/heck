@@ -54,6 +54,19 @@ class SessionWrapper (object):
         self._session.close()
 
 
+def delete_query (table_name, *criterion):
+    """ Delete based on filter """
+    session = session_factory()
+    try:
+        session.query(table[table_name]).filter(*criterion).delete(synchronize_session=False)
+        session.expire_all()
+        session.commit()
+    except:
+        session.rollback()   
+        raise
+    finally:
+        session.close()
+
 def query (table_name, *criterion):
     """ Run a complex query """
     session = session_factory()
@@ -64,7 +77,6 @@ def select (table_name, *criterion):
     """ Select one or more elements from a table """
     session = session_factory()
     query = session.query(table[table_name]).filter(*criterion)
-    #if limit: query = query.limit(limit)
     return SessionWrapper(session, query)
     
 def select_one (table_name, *criterion):

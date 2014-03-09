@@ -24,6 +24,17 @@ class TickDescription (IsDescription):
     filter_detail   = StringCol(1000)
 
 
+def adjuster (row, adjustment):
+    return {"time": row["time"],
+            "event": row["event"],
+            "price": row["price"] + adjustment,
+            "volume": row["volume"],
+            "qualifier": row["qualifier"],
+            "acc_volume": row["acc_volume"],
+            "filter_class": row["filter_class"],
+            "filter_detail": row["filter_detail"]}
+
+
 class TickEventEnum (object):
     """
     Defines the event enum mapping to integer value.
