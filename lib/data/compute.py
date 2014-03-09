@@ -139,10 +139,14 @@ class Wrapper (object):
                 self._current_reader_iter = self._current_reader.read_iter(start=start_index, stop=None, step=self._step)
                 self._next_index += next_series["count"]
                 self._adjust = next_series["cumulative_adjust"]
-            self._virtual_index += 1
-            next_row = self._current_reader_iter.__next__()
-            self._last_tick = next_row["time"]
-            return self._adjuster(next_row, self._adjust)
+            self._virtual_index += self._step
+            try:
+                for step in range(0, self._step):
+                    next_row = self._current_reader_iter.__next__()
+                self._last_tick = next_row["time"]
+                return self._adjuster(next_row, self._adjust)
+            except StopIteration:
+                return self.__next__()
         else:
             raise StopIteration()
 
