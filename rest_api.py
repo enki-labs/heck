@@ -57,7 +57,7 @@ class Data (Resource):
     def render_GET (self, request):
         series = schema.table.series
 
-        response = dict(data=[], volume=[], adj=[], tstart=0, tend=0, istart=0, iend=0)
+        response = dict(data=[], actual=[], volume=[], adj=[], tstart=0, tend=0, istart=0, iend=0)
 
         with schema.select("series", series.id==int(request.args[b"id"][0].decode("utf-8"))) as select:
             with data.get_reader(select.first()) as reader: 
@@ -80,6 +80,7 @@ class Data (Resource):
                           , handle_nan(row["low"])
                           , handle_nan(row["close"])
                           , handle_nan(row["volume"])])
+                        response["actual"].append([float(row["time"]/1000000), handle_nan(row["actual"])])
                         response["volume"].append([float(row["time"]/1000000), handle_nan(row["volume"])])
 
                     if len(response["data"]) > 0:
@@ -161,14 +162,18 @@ class Spark (Resource):
                 else:
                     if params["format"] == "ohlcv":
                         data = DataFrameWrapper(s, resolution=params["resolution"])
-                        plot = spark.Spark.plot(data=data.dframe["close"]
-                                , volume=data.dframe["volume"]
-                                , enable_volume=True
-                                , width=float(request.args[b"width"][0])
-                                , height=float(request.args[b"height"][0]))
-                        cached = {"lm": s.last_modified, "res": plot.getvalue()}
-                        memcache.set(cache_id, cached)
-                        request.write(cached["res"])
+                        if len(data.dframe) > 0 and "close" in data.dframe.columns.values:
+                            plot = spark.Spark.plot(data=data.dframe["close"]
+                                    , volume=data.dframe["volume"]
+                                    , enable_volume=True
+                                    , width=float(request.args[b"width"][0])
+                                    , height=float(request.args[b"height"][0]))
+                            cached = {"lm": s.last_modified, "res": plot.getvalue()}
+                            memcache.set(cache_id, cached)
+                            request.write(cached["res"])
+                        else:
+                            #request.write()
+                            pass
                     elif params["format"] == "tick":
                         data = DataFrameWrapper(s, no_index=True, resolution=params["resolution"])
                         plot = spark.Spark.plot(data=data.dframe["price"]

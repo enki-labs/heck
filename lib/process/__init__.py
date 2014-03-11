@@ -22,6 +22,41 @@ class DataFrameWrapper (object):
 
     def __init__ (self, series, no_index=False, resolution=0):
         self.series = series
+ 
+        with data.get_reader(series) as reader:
+            step = 1
+            if resolution > 0 and reader.count() > resolution:
+                step = int(reader.count() / resolution)
+
+            append_count = 0
+            append_temp = []
+            append_temp_times = []
+            append_wrapper = None
+            self.dframe = None
+            
+
+            for row in reader.read_iter(step=step):
+
+                if append_count == 0:
+                    if isinstance(row, dict):
+                        append_wrapper = lambda x: x
+                    else:
+                        append_wrapper = lambda x: x.fetch_all_fields()
+
+                if append_count % 5000 == 0:
+                    frame = pd.DataFrame.from_records(append_temp, columns=reader.columns(), index=pd.DatetimeIndex(pd.Series(append_temp_times).astype("datetime64[ns]"), tz="UTC"))
+                    append_temp = []
+                    append_temp_times = []
+                    self.dframe = pd.concat([self.dframe, frame])
+                else:
+                    append_temp_times.append(row["time"])
+                    append_temp.append(append_wrapper(row))
+                append_count += 1
+            
+            if len(append_temp) > 0:
+                frame = pd.DataFrame.from_records(append_temp, columns=reader.columns(), index=pd.DatetimeIndex(pd.Series(append_temp_times).astype("datetime64[ns]"), tz="UTC"))
+                self.dframe = pd.concat([self.dframe, frame])
+        """
         with data.get_reader(series) as reader:
             step = 1
             if resolution > 0 and reader.count() > resolution:
@@ -30,6 +65,7 @@ class DataFrameWrapper (object):
             datatable = []
             times = []
             for row in reader.read_iter(step=step):#, no_index=no_index):
+                print(row.fetch_all_fields())
                 datatable.append(row)
                 times.append(row["time"])
             self.dframe = pd.DataFrame.from_records(
@@ -37,6 +73,7 @@ class DataFrameWrapper (object):
                        , index=pd.DatetimeIndex(
                                pd.Series(times).astype("datetime64[ns]")
                        , tz="UTC"))
+        """
 
 
 class ProcessBase (object):
@@ -89,7 +126,7 @@ class ProcessBase (object):
         outputs = []
         with schema.select("series"
                          , series.tags.contains(include_tags_ids)
-                         , not_(series.tags.contains(exclude_tags_ids))
+                         , not_(series.tags.overlap(exclude_tags_ids))
                          ) as select:
             for selected in select.all():
                 tags = data.decode_tags(selected.tags)

@@ -6,7 +6,7 @@ Define the series table.
 from sqlalchemy import Column, Sequence, types
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import validates
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, JSON
 
 
 def table (base):
@@ -20,6 +20,15 @@ def table (base):
         end = Column(types.BigInteger, default=-1)
         count = Column(types.BigInteger, default=0)
         last_modified = Column(types.BigInteger, default=-1)
+        meta = Column(types.UnicodeText, default="{}")
+        _meta_dict = None
+
+        @property
+        def meta_dict (self):
+            from lib.schema import StringDictionaryWrapper
+            if not self._meta_dict:
+                self._meta_dict = StringDictionaryWrapper(self, "meta")
+            return self._meta_dict
 
         @validates('tags')
         def _set_tags (self, key, value):

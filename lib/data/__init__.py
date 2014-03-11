@@ -221,6 +221,14 @@ class Reader (object):
         return self._table.nrows
 
 
+    def columns (self):
+        """
+        Return list of columns in the same order as they
+        are defined in the row reader.
+        """
+        return self._table.colnames
+
+
     def nearest (self, timet):
         """
         Find nearest index to a given time.

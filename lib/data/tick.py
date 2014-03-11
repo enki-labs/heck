@@ -34,6 +34,8 @@ def adjuster (row, adjustment):
             "filter_class": row["filter_class"],
             "filter_detail": row["filter_detail"]}
 
+def adjuster_columns ():
+    return ["time", "event", "price", "volume", "qualifier", "acc_volume", "filter_class", "filter_detail"]
 
 class TickEventEnum (object):
     """

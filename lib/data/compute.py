@@ -18,12 +18,16 @@ class ComputeReader (object):
         self._series = series
         self._tags = tags
         self._series_list = []
-        self._reader = None        
+        self._reader = None
         self._count = 0
         self._adjuster = None
+        self._adjuster_columns = []
+
+    def columns (self):
+        return self._adjuster_columns
 
     def __enter__ (self):
-        common.log.info("loading compute state")
+
         from lib.data import ohlc
         from lib.data import tick
         if "format" not in self._tags:
@@ -31,12 +35,25 @@ class ComputeReader (object):
         elif self._tags["format"] == "ohlc":
             self._reader = lambda series : ohlc.OhlcReader(series) 
             self._adjuster = ohlc.adjuster
+            self._adjuster_columns = ohlc.adjuster_columns()
         elif self._tags["format"] == "tick":
             self._reader = lambda series : tick.TickReader(series)
             self._adjuster = tick.adjuster
+            self._adjuster_columns = tick.adjuster_columns()
         else:
             raise Exception("Unknown series format %s" % (self._tags["format"]))
 
+        if "compute" in self._series.meta_dict:
+            self._series_list = self._series.meta_dict["compute"]
+            self._count = self._series.count
+        else:
+            self._load_state()
+            self._series.meta_dict["compute"] = self._series_list
+            self._series.count = self._count
+            schema.save(self._series)
+        return self
+    
+    def _load_state (self):
         config_tags = {"compute": self._tags["compute"], "symbol": self._tags["symbol"]}
         config_tags_ids = resolve_tags(config_tags, create=False)
         self._config = schema.select_one("config", schema.table.config.tags==config_tags_ids)
@@ -51,8 +68,10 @@ class ComputeReader (object):
             search_tags = dict(list(self._tags.items()) + list(series["tags"].items()))
             search_tags_ids = resolve_tags(search_tags, create=False)
             series_entity = schema.select_one("series", schema.table.series.tags==search_tags_ids)
-            if start_tick == None and series_entity == None: continue #skip to first series
-            elif series_entity == None: raise Exception("Missing series %s" % (search_tags))
+            if start_tick == None and series_entity == None:
+                continue #skip to first series
+            elif series_entity == None:
+                raise Exception("Missing series %s" % (search_tags))
             first_index = 0
             with self._reader(series_entity) as reader:
                 if start_tick == None: first_index = 0
@@ -65,7 +84,7 @@ class ComputeReader (object):
                 end_tick = common.Time.tick(end_time.astimezone(pytz.utc))
                 last_index = reader.nearest(end_tick)
                 count = (last_index - first_index)
-                self._series_list.append({"series": series_entity, "adjust": series["adjust"], "end": end_tick, "cumulative_adjust": 0, "virtual_index": virtual_index, "count": count, "first_index": first_index, "last_index": last_index})
+                self._series_list.append({"series": series_entity.id, "adjust": series["adjust"], "end": end_tick, "cumulative_adjust": 0, "virtual_index": virtual_index, "count": count, "first_index": first_index, "last_index": last_index})
                 start_tick = end_tick
                 virtual_index += count
                 self._count += count
@@ -75,7 +94,6 @@ class ComputeReader (object):
             cumulative_adjust += self._series_list[index]["adjust"]
             self._series_list[index]["cumulative_adjust"] += cumulative_adjust
         common.log.info("loaded compute state")
-        return self
   
     def __exit__ (self, typ, value, tb):
         pass
@@ -99,6 +117,7 @@ class Wrapper (object):
         self._step = step
         self._adjust = 0
         self._adjuster = adjuster
+        self._last_tick = 0
 
         if start == None: self._start = 0
         else: self._start = start
@@ -112,7 +131,8 @@ class Wrapper (object):
         for series in self._series_list:
             index_count += series["count"] - 1
             if self._start < (series["virtual_index"] + series["count"]):
-               self._current_reader = self._reader(series["series"]).__enter__()
+               series_entity = schema.select_one("series", schema.table.series.id==series["series"])
+               self._current_reader = self._reader(series_entity).__enter__()
                self._next_index = series["virtual_index"] + series["count"]
                local_start = self._start - series["virtual_index"] + series["first_index"]
                self._current_reader_iter = self._current_reader.read_iter(start=local_start, stop=None, step=self._step)
@@ -133,7 +153,8 @@ class Wrapper (object):
                     raise StopIteration()
                 next_series = self._series_list[self._series_list_index]
                 self._current_reader.__exit__(None, None, None)
-                self._current_reader = self._reader(next_series["series"])
+                next_series_entity = schema.select_one("series", schema.table.series.id==next_series["series"])
+                self._current_reader = self._reader(next_series_entity)
                 self._current_reader.__enter__()
                 start_index = self._current_reader.nearest(self._last_tick)+1
                 self._current_reader_iter = self._current_reader.read_iter(start=start_index, stop=None, step=self._step)
@@ -141,12 +162,11 @@ class Wrapper (object):
                 self._adjust = next_series["cumulative_adjust"]
             self._virtual_index += self._step
             try:
-                for step in range(0, self._step):
-                    next_row = self._current_reader_iter.__next__()
+                next_row = self._current_reader_iter.__next__()
                 self._last_tick = next_row["time"]
                 return self._adjuster(next_row, self._adjust)
             except StopIteration:
-                return self.__next__()
+                raise
         else:
             raise StopIteration()
 

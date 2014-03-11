@@ -1,6 +1,10 @@
 
-var tauApp = angular.module("tauApp", ["mgcrea.ngStrap", "ngSanitize", "ngTagsInput", "ngGrid", "JSONedit"]);
-//"ui.bootstrap", "ui.bootstrap.tooltip", "ui.bootstrap.popover"
+var tauApp = angular.module("tauApp", ["mgcrea.ngStrap", "ngAnimate", "ngSanitize", "ngTagsInput", "ngGrid", "JSONedit"])
+             .config(function($selectProvider) {
+                 angular.extend($selectProvider.defaults, {
+                     sort: false
+                 });
+             });
 
 tauApp.controller("SeriesSummary", function ($scope, $http) {
     $http.get("api/summary").success(function(data) {
@@ -107,6 +111,7 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
                          };
             $http.get("/api/summary", params).success( function (data) {
                 $scope.state.summary = data;
+                console.log("REFRESH SUMMARY");
                 $scope.state.refresh = true;
             });
         }
@@ -119,6 +124,7 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
                                }
                      };
             $http.get("/api/data", params).success( function (data) {
+                console.log("REFRESH DATA");
                 $scope.state.data = data;
             });
         }
@@ -136,7 +142,15 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
                 zoomType: "x"
             },
             navigator : {
-                adaptToUpdatedData: false,
+                adaptToUpdatedData: true,
+                xAxis: {
+                    dateTimeLabelFormats: {
+                        day: '%Y-%m',
+                        week: '%Y-%m',
+                        month: '%Y-%m',
+                        year: '%Y'
+                    }
+                },
                 series: {
                     dataGrouping: { enabled: false },
                     data: $scope.state.summary.summary
@@ -151,16 +165,58 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
             },
             tooltip: {
                 valueDecimals: 6,
-                xDateFormat: "%Y-%m-%d %H:%M:%S%L"
+                xDateFormat: "%Y-%m-%d %H:%M:%S%L",
+                formatter: function() {
+                    var series = this.points[0].series;
+                    var chart = series.chart;
+                    var out = Highcharts.dateFormat("%Y-%m-%d %H:%M:%S.%L", this.x);
+                    var index = 0;
+                    while (this.x !== series.xData[index]) {index++;}
+                    $.each(chart.series, function (i, series) {
+                        if (series.name == "OHLC") {
+                            out += "<br/><b>Open</b> " + series.data[index].open + "<br/>" 
+                                      + "<b>High</b> " + series.data[index].high + "<br/>"
+                                      + "<b>Low</b> " + series.data[index].low + "<br/>"
+                                      + "<b>Close</b> " + series.data[index].close;
+                        }
+                        else if (series.name != "Navigator") {
+                            var value = series.data[index].y;
+                            if (value != null) {
+                                out += "<br/><b>" + series.name + "</b> " + series.data[index].y;
+                            }
+                        }
+                    });
+                    return out;
+                    //return this.y;
+                    //var s = '<b>'+ this.x +'</b>';
+                    //var chart = this.points[0].series.chart; //get the chart object
+                    //var categories = chart.xAxis[0].categories; //get the categories array
+                    //var index = 0;
+                    //while(this.x !== categories[index]){index++;} //compute the index of corr y value in each data arrays           
+                    //$.each(chart.series, function(i, series) { //loop through series array
+                    //    s += '<br/>'+ series.name +': ' +
+                    //         series.data[index].y +'m';     //use index to get the y value
+                    //});           
+                    //return s;
+                    //return this.x;
+                },
+                shared: true
             },
             scrollbar : {
                 enabled: false
             },
             series: [{  
                 type: "ohlc",
-                name: "Price",
+                name: "OHLC",
                 data : $scope.state.data.data,
                 dataGrouping : { enabled: false }
+            },
+            {
+                type: "line",
+                name: "Actual",
+                data: $scope.state.data.actual,
+                visible: false,
+                dataGrouping: { enabled: false }
             },
             {  
                 type: "column",
@@ -186,7 +242,7 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
             }],
             plotOptions: {  
                 ohlc: {turboThreshold: 10000},
-                series: {marker: {enabled: true}},
+                series: {marker: {enabled: false}},
                 scatter: {tooltip: {pointFormat: "{point.name}"}}
             }
         };//options
@@ -752,18 +808,144 @@ tauApp.controller("TaskProcess", function ($scope, $http) {
 
 });
 
-tauApp.controller("SeriesSearch", function ($rootScope, $scope, $http, $q) {
+/***
+   Copyright 2013 Teun Duynstee
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
+ */
+firstBy = (function() {
+    /* mixin for the `thenBy` property */
+    function extend(f) {
+        f.thenBy = tb;
+        return f;
+    }
+    /* adds a secondary compare function to the target function (`this` context)
+       which is applied in case the first one returns 0 (equal)
+       returns a new compare function, which has a `thenBy` method as well */
+    function tb(y) {
+        var x = this;
+        return extend(function(a, b) {
+            return x(a,b) || y(a,b);
+        });
+    }
+    return extend;
+})();
+
+
+tauApp.controller("SeriesSearch", function ($rootScope, $scope, $http, $q, $timeout) {
 
     $scope.tags = {};
+    $scope.search_result = {};
+    $scope.sortOrder = [];
+    $scope.sortOrderOptions = [];
+
+    $scope.$watch("sortOrder", function (after, before) {
+        if ($.isArray($scope.search_result) && $scope.sortOrder.length > 0) {
+
+            var tagCompare = function (v1, v2, tag) {
+                if (tag in v1.tags && tag in v2.tags) {
+                    if ($.isNumeric(v1.tags[tag])) {
+                        var v1num = parseInt(v1.tags[tag]); var v2num = parseInt(v2.tags[tag]);
+                        if (v1num > v2num) {return 1;} else if (v1num < v2num) {return -1;} else {return 0;} 
+                    }
+                    else { 
+                        return v1.tags[tag].localeCompare(v2.tags[tag]);
+                    }
+                }
+                else if (tag in v2.tags) {
+                    return 1;
+                }
+                else if (tag in v1.tags) {
+                    return -1;
+                }
+                else {
+                    return 0;
+                }
+            };
+ 
+            if ($scope.sortOrder.length == 1) { 
+                $scope.search_result.sort(
+                    firstBy(function (v1, v2) { return tagCompare(v1, v2, $scope.sortOrder[0]); })
+                );
+            }
+            else if ($scope.sortOrder.length == 2) {
+                $scope.search_result.sort(
+                    firstBy(function (v1, v2) { return tagCompare(v1, v2, $scope.sortOrder[0]); })
+                   .thenBy(function (v1, v2) { return tagCompare(v1, v2, $scope.sortOrder[1]); })
+                );
+            }
+            else if ($scope.sortOrder.length == 3) {
+                $scope.search_result.sort(
+                    firstBy(function (v1, v2) { return tagCompare(v1, v2, $scope.sortOrder[0]); })
+                   .thenBy(function (v1, v2) { return tagCompare(v1, v2, $scope.sortOrder[1]); })
+                   .thenBy(function (v1, v2) { return tagCompare(v1, v2, $scope.sortOrder[2]); })
+                );
+            }
+            else if ($scope.sortOrder.length == 4) {
+                $scope.search_result.sort(
+                    firstBy(function (v1, v2) { return tagCompare(v1, v2, $scope.sortOrder[0]); })
+                   .thenBy(function (v1, v2) { return tagCompare(v1, v2, $scope.sortOrder[1]); })
+                   .thenBy(function (v1, v2) { return tagCompare(v1, v2, $scope.sortOrder[2]); })
+                   .thenBy(function (v1, v2) { return tagCompare(v1, v2, $scope.sortOrder[3]); })
+                );
+            }
+            /*
+            $scope.search_result.sort(function (a, b) {
+                var sort = 0;
+                $scope.sortOrder.forEach(function (key) {
+                    if (key in a.tags && key in b.tags) {
+                        sort = a.tags[key].localeCompare(b.tags[key]);
+                        return;
+                    }
+                    else if (key in b.tags) { sort = 1; return; }
+                });
+                return sort;
+            });*/
+        }
+    }, true);
 
     $scope.search = function () {
-        /*var tagSearch = {};
-        $scope.tags.forEach(function(fullTag){
-            var tagParts = fullTag.split(":");
-            tagSearch[tagParts[0]] = tagParts[1];
-        });*/
+        $scope.sortOrder = [];
         $http.get("/api/find", {params: {tags: JSON.stringify($scope.tags)}}).success( function(data) {
             $scope.search_result = data;
+            var labelNames = {};
+            var tagNames = {};
+            $scope.search_result.forEach(function (result, index) {
+               $.each(result.tags, function (key, value) {
+                   var labelKey = key + ":" + value;
+                   if (labelKey in labelNames) { labelNames[labelKey].count += 1; }
+                   else { labelNames[labelKey] = {count: 1, key: key}; }
+                   if (key in tagNames) { tagNames[key].count += 1; }
+                   else { tagNames[key] = {count: 1}; }
+               });
+            });
+            var sortOptions = [];
+            $.each(labelNames, function (key, summary) {
+                if (summary.count < $scope.search_result.length) {
+                    if (summary.key in tagNames) { 
+                        sortOptions.push({key: summary.key, count: tagNames[summary.key].count});
+                        delete tagNames[summary.key];
+                    }
+                }
+            });
+            sortOptions.sort(function (a, b) {
+                return b.count - a.count; //desc
+            });
+            $scope.sortOrderOptions = [];
+            sortOptions.slice(0, 4).forEach(function (val) {
+                $scope.sortOrderOptions.push({value: val.key, label: val.key});
+            });
+            //$scope.sortOrderOptions = [{value: "year", label: "year"},{value: "month", label: "month"}];
         });
     };
 

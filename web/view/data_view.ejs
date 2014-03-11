@@ -54,14 +54,23 @@
                                 <a class="btn btn-primary btn-xs btn-pull-right" href="#" ng-click="search()">
                                     <i class="fa fa-search icon-white"></i> Search</a>
                             </div>
-                            <div class="search-list">
+                            <div ng-show="search_result.length">
+                                <button type="button" class="btn btn-primary btn-xs" ng-model="sortOrder" 
+                                                      data-html="1" data-multiple="1" data-animation="am-flip-x" 
+                                                      data-sort="0" data-placeholder="sort..."
+                                                      data-template="tag-sort-select.html"
+                                                      ng-options="icon.value as icon.label for icon in sortOrderOptions" bs-select>
+                                Action <span class="caret"></span>
+                                </button>
+                            </div>
+                            <div class="search-list" ng-if="search_result.length">
                                 <div class="search-result" ng-repeat="result in search_result" 
                                                            ng-class="result.ng_selected ? 'search-result-selected' : 'not-selected'" 
                                                            ng-mouseenter="highlight(result,true)" 
                                                            ng-mouseleave="highlight(result, false)" 
                                                            ng-dblclick="view(result)">
                                     <span class="label label-primary search-result-label" ng-repeat="(name, value) in result.tags">{{name}}:{{value}}</span> 
-                                    <spark class="search-result-spark" sparkwidth="3.0" sparkheight="0.4" resolution="5000" series="result"></spark>
+                                    <spark class="search-result-spark" sparkwidth="2.5" sparkheight="0.35" resolution="5000" series="result"></spark>
                                 </div>
                             </div>
                         </div>

@@ -32,8 +32,10 @@ def adjuster (row, adjustment):
             "close": row["close"] + adjustment,
             "volume": row["volume"],
             "openInterest": row["openInterest"],
-            "actual": row["actual"]}
+            "actual": row["close"]}
 
+def adjuster_columns ():
+    return ["time", "open", "high", "low", "close", "volume", "openInterest", "actual"]
 
 class OhlcReader (Reader):
     """
