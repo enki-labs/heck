@@ -16,7 +16,7 @@ sudo ntpdate europe.pool.ntp.org
 sudo service ntp start
 
 echo "### connect data store ###"
-sudo sshfs -o IdentityFile=/root/.ssh/ec2key.pem root@5.9.111.76:/home/data -o allow_other /home/data
+sudo sshfs -o IdentityFile=/root/.ssh/ec2key.pem -o Ciphers=arcfour root@5.9.111.76:/home/data -o allow_other /home/data
 
 echo "### update software ###"
 git pull
