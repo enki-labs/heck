@@ -22,7 +22,7 @@ def init_task (f, *args, **kw):
     sys.path.append(os.getcwd())
     from config import prod
 
-    args[0].__t = BackendStore(args[0].request.id, args[0].name)
+    args[0].__t = BackendStore(args[0].request.id, args[0].name, args[0].request.hostname, args[1:])
     return f(*args, **kw)
 
 
@@ -57,7 +57,7 @@ Task backend procedures.
 """
 class BackendStore (object):
 
-    def __init__ (self, task_id, task_name):
+    def __init__ (self, task_id, task_name, node, args):
         self._progress_timeout = 0
         self._progress_current = 0
         self._progress_current_last = 0
@@ -68,8 +68,10 @@ class BackendStore (object):
         from lib import common
         self._db_entity = schema.table.status()
         self._db_entity.task_id = task_id
-        self._db_entity.node = "rabbit@Ubuntu-1204-precise-64-minimal"
+        self._db_entity.instance_id = common.instanceid 
+        self._db_entity.node = node
         self._db_entity.name = task_name
+        self._db_entity.arguments = json.dumps(args)
         self._db_entity.status = "PENDING"
         self._db_entity.started = common.Time.tick()
         self._db_entity.last_modified = common.Time.tick()

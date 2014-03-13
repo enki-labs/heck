@@ -98,7 +98,7 @@ def queue (self):
 
         with schema.select("inbound", inbound.path.like("inbound/%"), inbound.status=="dirty") as select:
             self.__t.progress_end(select.count())
-            for inbound_file in select.limit(queue_rate).all():
+            for inbound_file in select.order_by(inbound.path).limit(queue_rate).all():
 
                 if "bloomberg/ohlcv" in inbound_file.path:
                     import_bloomberg_ohlc.delay(inbound_file.path)   
@@ -106,6 +106,8 @@ def queue (self):
                     import_bloomberg_symbol.delay(inbound_file.path)
                 elif "reuters/tick" in inbound_file.path:
                     import_reuters_tick.delay(inbound_file.path)
+                elif "reuters/ohlc" in inbound_file.path:
+                    import_reuters_ohlc.delay(inbound_file.path)
                 else:
                     continue
 
@@ -179,5 +181,27 @@ def import_reuters_tick (self, path):
                         shutil.copyfileobj(gzip.open(infile.local_path()), ntf)
                         ntf.seek(0,0)
                         reuters_tick.Import.parse(ntf, self.__t)
+        self.__t.ok()
+
+@task(bind=True)
+@init_task
+def import_reuters_ohlc (self, path):
+    """ Import Reuters OHLC files """
+
+    with self.__t.steps():
+        import shutil
+        from tempfile import NamedTemporaryFile
+        import gzip
+        from lib import common
+        from lib import schema
+        from lib.inbound import reuters_ohlc
+        inbound = schema.table.inbound
+        with schema.select("inbound", inbound.path==path) as select:
+            for inbound_file in select.all():
+                with NamedTemporaryFile(delete=True) as ntf:
+                    with common.store.read(inbound_file.path, open_handle=True) as infile:
+                        shutil.copyfileobj(gzip.open(infile.local_path()), ntf)
+                        ntf.seek(0,0)
+                        reuters_ohlc.Import.parse(ntf, self.__t)
         self.__t.ok()
 

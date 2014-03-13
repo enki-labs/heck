@@ -358,6 +358,7 @@ class InnerWriter (object):
                 if row["time"] > first:
                     if not self._writer_lock._overwrite:
                         if last > row["time"]:
+                            common.log.info("%s > %s" % (common.Time.time(last), common.Time.time(row["time"])))
                             raise exception.OverlapException()
                         else:
                             break
@@ -398,8 +399,7 @@ class WriterLock (object):
         """
         self._table.flush()
         self._table.flush_rows_to_index()
-        self._table.cols.time.reindex_dirty()
-        self._table.flush()
+        self._table.cols.time.reindex()
         if not table_only:
             count = int(self._table.nrows)
             start = -1 if count == 0 else int(self._get_row(0)['time'])
@@ -442,10 +442,14 @@ class WriterLock (object):
         """
         Handle 'with' exit.
         """
+        if self._table:
+            self._table.close()
         if self._file:
             self._file.close()
+            time.sleep(15)
         if self._store:
             self._store.__exit__(None, None, None)
+            time.sleep(15)
 
 
     def _get_row (self, index):
@@ -477,6 +481,7 @@ class WriterLock (object):
                 if row["time"] > first:
                     if not self._overwrite:
                         if last > row["time"]:
+                            common.log.info("%s > %s" % (common.Time.time(last), common.Time.time(row["time"])))
                             raise exception.OverlapException()
                         else:
                             break
@@ -533,6 +538,7 @@ class Writer (object):
                 if row["time"] > self._first:
                     if not self._overwrite:
                         if self._last > row["time"]:
+                            common.log.info("%s > %s" % (common.Time.time(self._last), common.Time.time(row["time"])))
                             raise exception.OverlapException()
                         else:
                             break
@@ -546,7 +552,7 @@ class Writer (object):
         """
         self._table.flush()
         self._table.flush_rows_to_index()
-        self._table.cols.time.reindex_dirty()
+        self._table.cols.time.reindex()
         self._table.flush()
         count = int(self._table.nrows)
         start = -1 if count == 0 else int(self._get_row(0)['time'])
@@ -587,6 +593,8 @@ class Writer (object):
         """
         Handle 'with' exit.
         """
+        if self._table:
+            self._table.close()
         if self._file:
             self._file.close()
         if self._store:

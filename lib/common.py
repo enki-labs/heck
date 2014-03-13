@@ -18,6 +18,9 @@ import pytz
 import calendar
 from autologging import logged, traced, TracedMethods
 from pywebhdfs.webhdfs import PyWebHdfsClient, errors
+import redis
+#from retools.lock import Lock
+import redis_lock
 import exception
 
 instanceid = str(uuid.uuid4())
@@ -25,6 +28,7 @@ instanceid = str(uuid.uuid4())
 """ Global environment """
 store_engine = os.environ["HECK_STORE_ENGINE"]
 db_connection = os.environ["HECK_DB"]
+redis_connection = os.environ["HECK_REDIS"]
 
 log = logging.getLogger("heck")
 log_level = logging.INFO
@@ -38,6 +42,8 @@ __stdout_handler.setLevel(log_level)
 __formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 __stdout_handler.setFormatter(__formatter)
 log.addHandler(__stdout_handler)
+
+redis_client = redis.StrictRedis.from_url(redis_connection)
 
 store = None
 if store_engine == "hdfs":
@@ -60,6 +66,13 @@ class ResourceLock (object):
         self._lock = None
 
     def acquire (self, timeout_secs=None):
+
+        # redis method
+        self._lock = redis_lock.Lock(redis_client, self._name)
+        self._lock.acquire(blocking=True)
+        
+        # sql method
+        """
         from lib import schema
         from sqlalchemy.exc import IntegrityError
         new_lock = schema.table.lock()
@@ -84,11 +97,21 @@ class ResourceLock (object):
             elif lock and lock.instance == instanceid:
                 break # already have an active lock
                       # this lock will be a dummy
+        """
 
     def release (self):
+
+        # redis method
+        if self._lock:
+            self._lock.release()
+            self._lock = None
+
+        # sql method
+        """
         from lib import schema
         if self._lock and schema:
             schema.delete(self._lock)
+        """
 
     def __del__ (self):
         self.release()

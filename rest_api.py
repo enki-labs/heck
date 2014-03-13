@@ -228,7 +228,19 @@ class Summary (Resource):
             response = dict(summary=[], tzero=0, tmax=0, imax=0)
 
             with schema.select("series", series.id==int(request.args[b"id"][0].decode("utf-8"))) as select:
-                with data.get_reader(select.first()) as reader:
+                series = select.first()
+
+                #TODO wrap series/symbol/exchange in a lib
+                response["timezone"] = "UTC"
+                symbol = schema.select_one("symbol", schema.table.symbol.symbol==series.symbol)
+                meta = symbol.meta_dict()
+                if "exchange" in meta:
+                    exchange = schema.select_one("exchange", schema.table.exchange.code==meta["exchange"])
+                    if exchange:
+                        response["timezone"] = exchange.timezone
+
+                with data.get_reader(series) as reader:
+                    
                     rows = reader.count()
                     read_format = request.args[b"format"][0].decode("utf-8")
                     resolution = int(request.args[b"resolution"][0].decode("utf-8"))
@@ -270,6 +282,58 @@ class Summary (Resource):
                     request.write(json.dumps(result).encode())
         return b""
 
+
+class Worker (Resource):
+
+    isLeaf = True
+
+    def __init__ (self, args):
+        super().__init__()
+        self._args = args
+
+    def getChild (self, name, request):
+        return FourOhFour()
+
+    def render_GET (self, request):
+        result = {}
+        if b"action" in request.args:
+            action = request.args[b"action"][0].decode("utf-8")
+
+            if action == "create":
+                params = {"name": worker_name.acquire(),
+                          "size_slug": "16gb",
+                          "image_id": 2524371,
+                          "region_slug": "ams2",
+                          "client_id": args.do_client,
+                          "api_key": args.do_key}           
+                print(params)
+                response = requests.get("https://api.digitalocean.com/droplets/new", params=params)
+                result = response.json()
+
+            elif action == "destroy":
+                target = request.args[b"target"][0].decode("utf-8")
+                params = {"client_id": args.do_client,
+                          "api_key": args.do_key,
+                          "scrub_data": true}
+                response = requests.get("https://api.digitalocean.com/droplets/%s/destroy" % target, params=params)
+                result = response.json()
+
+            elif action == "list":
+                params = {"client_id": args.do_client,
+                          "api_key": args.do_key}
+                response = requests.get("https://api.digitalocean.com/droplets", params=params)
+                result = response.json()
+
+            elif action == "progress":
+                target = request.args[b"target"][0].decode("utf-8")
+                params = {"client_id": args.do_client,
+                          "api_key": args.do_key}
+                respsonse = requests.get("https://api.digitalocean.com/events/%s" % target, params=params)
+                result = response.json()
+                
+        request.setHeader(b'Content-Type', b'text/json')
+        request.write(json.dumps(result).encode())
+        return b""
 
 class Tag (Resource):
 
@@ -354,7 +418,6 @@ class Task (Resource):
             executing = {}
             with schema.query("status", schema.table.status.node, func.count(schema.table.status.id)) as items:
                 for row in items.filter(schema.table.status.status=="PROGRESS").group_by(schema.table.status.node).all():
-                    print(row)
                     executing[row[0]] = row[1]
             result = {"executing": executing,
                       "stats": celery_client.control.inspect().stats(),
@@ -375,7 +438,8 @@ class Task (Resource):
                         per_second = item_result["per_second"]
                         est_seconds = (item_result["total"] - item_result["step"])/item_result["per_second"]
                         estimate = format_timedelta(timedelta(seconds=est_seconds), locale="en_US")
-                    result.append({"node": item.node, "task_id": item.task_id, "name": item.name, "status": item.status, "progress": progress, "per_second": per_second, "estimate": estimate, "time_start": item.started, "time_end": item.last_modified, "result": item_result}) 
+                    elapsed = format_timedelta(timedelta(seconds=((item.last_modified-item.started)/common.Time.nano_per_second)), locale="en_US")
+                    result.append({"node": item.node, "task_id": item.task_id, "instance_id": item.instance_id, "name": item.name, "arguments": item.arguments, "status": item.status, "progress": progress, "per_second": per_second, "estimate": estimate, "time_start": item.started, "time_elapsed": elapsed, "time_end": item.last_modified, "result": item_result}) 
 
         elif action == "list":
             item = request.args[b"item"][0].decode("utf-8")
@@ -410,6 +474,11 @@ class Task (Resource):
                                          schema.table.symbol_resolve.resolve.ilike("%%%s%%" % item_filter["resolve"])) as items:
                     for row in items.order_by(schema.table.symbol.symbol).limit(100).all():
                         result.append(row.to_dict())
+            elif item == "timezone":
+                result = []
+                with schema.query("exchange", distinct(schema.table.exchange.timezone)) as items:
+                    for row in items.order_by(schema.table.exchange.timezone).all():
+                        result.append(row[0])
 
         elif action == "delete":
             item = request.args[b"item"][0].decode("utf-8")
@@ -450,7 +519,6 @@ class Task (Resource):
                         schema.save(schema.table.config.from_dict(target_item))
             elif item == "process":
                 for target_item in target:
-                    print(target_item)
                     target_item["last_modified"] = common.Time.tick()
                     if target_item["id"]: #TODO how to upsert with SQLAlchemy if id set by init?
                         get_item = schema.select_one("process", schema.table.process.id==target_item["id"])
@@ -521,6 +589,8 @@ class Api (Resource):
             return Tag()
         elif name == b"task":
             return Task(args)
+        elif name == b"worker":
+            return Worker(args)
         return FourOhFour()
 
 class Index (Resource):
@@ -562,6 +632,8 @@ parser.add_argument("--celery_host", help="Celery broker host (eg: localhost)", 
 parser.add_argument("--celery_broker", help="Celery broker URL (eg: amqp://celery:pass@localhost:5672/task)", required=True)
 parser.add_argument("--celery_backend", help="Celery DB URL (eg: db+postgresql://heck:pass@localhost/heck)", required=True)
 parser.add_argument("--celery_tables", type=json.loads, help='Celery DB table names (eg: {"task": "celery_task", "group": "celery_group"})', required=True) 
+parser.add_argument("--do_client", help="DO client", required=True)
+parser.add_argument("--do_key", help="DO key", required=True)
 args = parser.parse_args()
 
 celery_client = celery.Celery()
@@ -574,6 +646,27 @@ celery_client.config_from_object({"BROKER_URL": args.celery_broker,
 memcache = memcache.Client(['127.0.0.1:11211'], debug=0)
 redis_client = redis.StrictRedis(host='localhost', port=6379, db=0, password=args.celery_pass)
 
+
+class WorkerName (object):
+    def __init__ (self):
+        #TODO get existing worker names..
+        self._names = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel", "india", "juliett", "kilo",
+                       "lima", "mike", "november", "oscar", "papa", "quebec", "romeo", "sierra", "tango", "uniform", "victor",
+                       "whiskey", "xray", "yankee", "zulu"]
+        self._used = []
+
+    def acquire (self):
+        for name in self._names:
+            if name not in self._used:
+                self._used.append(name)
+                return name
+
+    def release (self, name):
+        self._used.remove(name)
+
+
+worker_name = WorkerName()
+  
 res = Index(args)
 factory = Site(res)
 reactor.listenTCP(args.port, factory)
