@@ -39,7 +39,7 @@ class Process (ProcessBase):
                           , "volume":"sum"
                           , "openInterest":"sum"
                           , "actual":"first" }
-            resampled = wrapper.dframe.resample(self._params["period"], how=ohlc_sampler)
+            resampled = wrapper.dframe.resample(self._params["period"], how=ohlc_sampler).dropna()
             if len(resampled) > 0:
                 first = resampled.head(1).index[0].value
                 last = resampled.tail(1).index[0].value

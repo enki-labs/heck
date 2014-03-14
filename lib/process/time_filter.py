@@ -29,7 +29,6 @@ class Process (ProcessBase):
         with schema.select("series"
                          , series.tags.contains(include_tags_ids)
                          , not_(series.tags.overlap(exclude_tags_ids))
-                         , series.symbol=="ES"
                          ) as select:
             for selected in select.all():
                 tags = data.decode_tags(selected.tags)
@@ -81,7 +80,6 @@ class Process (ProcessBase):
 
             with data.get_reader_pandas(series) as reader:
                 filtered = reader.df.tz_convert(pytz.timezone(timezone)).between_time(open_time, close_time).dropna().tz_convert(pytz.UTC)
-                print("TIMEZONE OK!!!!!")
 
                 if len(filtered) > 0:
                     first = filtered.head(1).index[0].value
