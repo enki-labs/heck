@@ -118,14 +118,16 @@ class ProcessBase (object):
 
     def _generate_multi (self):
         """ Generate series on one in one out basis """
-        include_tags_ids = data.resolve_tags(self._include, create=False)
+        include_tags_any_ids = data.resolve_tags(self._include["any"], create=False)
+        include_tags_all_ids = data.resolve_tags(self._include["all"], create=False)
         exclude_tags_ids = data.resolve_tags(self._exclude, create=False)
         if len(exclude_tags_ids) == 0:
             exclude_tags_ids = [0] #always match
         series = schema.table.series
         outputs = []
         with schema.select("series"
-                         , series.tags.contains(include_tags_ids)
+                         , series.tags.overlap(include_tags_any_ids)
+                         , series.tags.contains(include_tags_all_ids)
                          , not_(series.tags.overlap(exclude_tags_ids))
                          ) as select:
             for selected in select.all():
