@@ -197,3 +197,20 @@ popd
 rm -rf npm
 popd
 
+
+mkdir -p temp
+pushd temp
+git clone https://github.com/phmc/python3-protobuf.git
+pushd python3-protobuf
+apt-get install -y libtool automake autoconf autotools-dev
+./autogen.sh
+./configure
+make
+pushd python
+python3 setup.py install
+popd
+popd
+rm -rf python3-protobuf
+popd
+
+

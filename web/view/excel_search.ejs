@@ -1,0 +1,114 @@
+<!doctype html>
+<html ng-app="tauApp">
+    <head>
+        <% include header %>
+        <style type="text/css">
+        .panel-header-plain a {
+        color: white;
+        margin-right: 5px;
+        }
+        </style>
+        
+        <script src="js/ng-grid.js" type="text/javascript"></script>
+        <link rel="stylesheet" type="text/css" href="//cdnjs.cloudflare.com/ajax/libs/ng-grid/2.0.7/ng-grid.css"></link>
+        <script src="//cdnjs.cloudflare.com/ajax/libs/angular-ui/0.4.0/angular-ui.min.js" type="text/javascript"></script>
+        <link rel="stylesheet" type="text/css" href="//cdnjs.cloudflare.com/ajax/libs/angular-ui/0.4.0/angular-ui.min.css"></link>
+
+        <script src="js/datetime.js"></script>
+        <script src="js/data-view.js"></script>
+        <script type="text/javascript" src="js/ng-tags-input.js"></script>
+        <link rel="stylesheet" type="text/css" href="css/ng-tags-input.min.css"></link>
+        <script type="text/javascript" src="js/JSONedit.js"></script>
+    </head>
+    <body>
+        <div class="container-fluid" style="height: 100%;" ng-controller="SeriesSearch">
+            <div class="row-fluid">    
+                <div class="col-md-4">
+                    <div class="panel">
+                        <div class="panel-header">Search</div>
+                        <div class="panel-inner">
+                            <tags-input ng-model="tags"
+                                        custom-class="tag-search"
+                                        add-on-space="false"
+                                        add-on-comma="false"
+                                        add-on-blur="false"
+                                        placeholder="Add search tags...">
+                                <auto-complete source="tag_autocomplete($query)" 
+                                               source_value="tag_autocomplete($query)" 
+                                               min-length=1>
+                                </auto-complete>
+                            </tags-input>
+                            <div class="button-space">
+                                <a class="btn btn-primary btn-xs btn-pull-right" href="#" ng-click="search()">
+                                    <i class="fa fa-search icon-white"></i> Search</a>
+                            </div>
+                            <div ng-show="search_result.length">
+                                <button type="button" class="btn btn-primary btn-xs" ng-click="toggle()">Select All</button>
+                                <button type="button" class="btn btn-primary btn-xs" ng-model="sortOrder" 
+                                                      data-html="1" data-multiple="1" data-animation="am-flip-x" 
+                                                      data-sort="0" data-placeholder="sort..."
+                                                      data-template="tag-sort-select.html"
+                                                      ng-options="icon.value as icon.label for icon in sortOrderOptions" bs-select>
+                                Action <span class="caret"></span>
+                                </button>
+                            </div>
+                            <div class="search-list" ng-if="search_result.length">
+                                <div style="height: 100px; width:100%; z-index: 1000; position: absolute; top: 0; right: 0; background: url(img/load.gif) no-repeat center scroll;" ng-if="loading"></div>
+                                <div class="search-result" ng-repeat="result in search_result" 
+                                                           ng-class="result.ng_selected ? 'search-result-selected' : 'not-selected'" 
+                                                           ng-mouseenter="highlight(result, true)" 
+                                                           ng-mouseleave="highlight(result, false)" 
+                                                           ng-click="select(result, true)">
+                                    <span class="label label-primary search-result-label" ng-repeat="(name, value) in result.tags">{{name}}:{{value}}</span> 
+                                    <spark class="search-result-spark" sparkwidth="2.5" sparkheight="0.35" resolution="5000" series="result"></spark>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-8">
+                    <div class="panel">
+                        <div class="panel-header" ng-if="futureSelected">Futures Series</div>
+                        <div class="panel-control" ng-if="futureSelected">
+                            <div class="input-group">
+                                <span class="input-group-addon">Year from
+                                </span><input style="width: 70px;" type="number" ng-model="future.year_from" ng-pattern="/[0-9]+$/" class="ng-pristine ng-valid ng-valid-number ng-valid-pattern">
+                            </div>
+                            <div class="input-group">
+                                <span class="input-group-addon">to
+                                </span><input style="width: 70px;" type="number" ng-model="future.year_to" ng-pattern="/[0-9]+$/" class="ng-pristine ng-valid ng-valid-number ng-valid-pattern">
+                            </div>
+                            <span>&nbsp;&nbsp;</span>
+                            <span class="input-group-addon" style="border-radius: 3px;">Months <button type="button" class="btn btn-primary btn-xs ng-pristine ng-valid" style="font-size: 80%;" ng-model="future.months" data-html="1" data-animation="am-flip-x" data-multiple="1" data-max-length="13" data-sort="0" data-placeholder="select months" data-template="tag-sort-select.html" ng-options="icon.value as icon.label for icon in monthOptions" bs-select=""><span class="caret"></span></button>
+                            </span>
+                            <span>&nbsp;&nbsp;</span>
+                            <span class="input-group-addon" style="border-radius: 3px;">Split By <button type="button" class="btn btn-primary btn-xs ng-pristine ng-valid" style="font-size: 80%;" ng-model="future.split" data-html="1" data-animation="am-flip-x" data-sort="0" data-placeholder="select split" data-template="tag-sort-select.html" ng-options="icon.value as icon.label for icon in splitOptions" bs-select=""><span class="caret"></span></button>
+                            </span>
+                            <span>&nbsp;&nbsp;</span>
+                            <a class="btn btn-primary btn-xs" href="#" ng-click="futuredown()">
+                            <i class="fa fa-download icon-white"></i> Download Contracts</a>
+                        </div>
+                        <div class="panel-header">Selected</div>
+                        <div class="panel-inner">
+                            <div class="button-space" ng-if="selected.length">
+                                <a class="btn btn-primary btn-xs btn-pull-left" href="#" ng-click="exceldown()">
+                                    <i class="fa fa-download icon-white"></i> Download Selected</a>
+                            </div>
+                            <div class="search-result" ng-repeat="result in selected" 
+                                                           ng-class="result.ng_selected ? 'search-result-selected' : 'not-selected'" 
+                                                           ng-mouseenter="highlight(result, true)" 
+                                                           ng-mouseleave="highlight(result, false)" 
+                                                           ng-click="select(result, false)">
+                                    <span class="label label-primary search-result-label" ng-repeat="(name, value) in result.tags">{{name}}:{{value}}</span> 
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <% include script %>
+
+        <% include footer %>
+    </body>
+</html>

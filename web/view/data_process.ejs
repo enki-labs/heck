@@ -51,6 +51,15 @@
                         </div>
                     </div>
                     <div class="panel">
+                        <div class="panel-header">Workers</div>
+                        <div class="panel-inner">
+                            <ul class="nav nav-pills nav-stacked">
+                                <li class="active"><a href="#" ng-click="show('workers-ondemand')"><i class="fa fa-cloud icon-white"></i> On Demand<span class="badge pull-right">{{workers_ondemand.length}}</span></a></li>
+                                <li class="active"><a href="#" ng-click="show('workers-shared')"><i class="fa fa-rocket icon-white"></i> Shared<span class="badge pull-right">2</span></a></li>
+                            </ul> 
+                        </div>
+                    </div>
+                    <div class="panel">
                         <div class="panel-header">Process Configuration</div>
                         <div class="panel-inner">
                             <ul class="nav nav-pills nav-stacked">
@@ -147,6 +156,10 @@
                                     <a class="btn btn-primary btn-xs" href="#" ng-click="deleteProcessHandler()">
                                         <i class="fa fa-minus-square icon-white"></i> Delete Selected</a>
                                 </div>
+                                <div style="margin-left: 10px; float: left;">
+                                    <a class="btn btn-primary btn-xs" href="#" ng-click="runProcess()">
+                                        <i class="fa fa-rocket icon-white"></i> Force Run Selected</a>
+                                </div>
                             <br style="clear: both;" />
                         </div>
                         <div class="panel-inner" style="height: 500px;">
@@ -194,6 +207,7 @@
                             <div style="height: 100%;" ng-grid="grid()"></div>
                         </div>
                     </div>
+                    
                     <div class="panel" ng-if="view == 'symbol-mapping'" ng-controller="SymbolMapping">
                         <div class="panel-header">Symbol</div>
                         <div class="panel-control">
@@ -233,6 +247,26 @@
                             <div style="height: 100%;" ng-grid="grid()"></div>
                         </div>
                     </div>
+
+                    <div class="panel" ng-if="view == 'workers-ondemand'" ng-controller="WorkersOnDemand">
+                        <div class="panel-header">Workers On Demand</div>
+                        <div class="panel-control">
+                            <div style="margin-left: 10px; float: left;">
+                                <a class="btn btn-primary btn-xs" href="#" ng-click="add()">
+                                <i class="fa fa-plus-square icon-white"></i> New Worker</a>
+                            </div>
+                            <div style="margin-left: 10px; float: left;">
+                                <a class="btn btn-primary btn-xs" href="#" ng-click="delete()">
+                                <i class="fa fa-minus-square icon-white"></i> Destroy Selected</a>
+                            </div>
+                            <br style="clear: both;" />
+                        </div>
+                        <div class="panel-inner" style="height: 500px;">
+                            <div style="height: 100%;" ng-grid="grid()"></div>
+                        </div>
+                    </div>
+                </div>
+
                 </div>
             </div>
         </div>

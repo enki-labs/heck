@@ -1,10 +1,12 @@
 import numpy as np
+import pandas as pd
 from sqlalchemy import and_, not_
 import pytz
 from lib.process import DataFrameWrapper
 from lib.process import ProcessBase
 from lib import data
 from lib import schema
+from lib import common
 
 
 class Process (ProcessBase):
@@ -20,6 +22,10 @@ class Process (ProcessBase):
 
     def generate (self):
         """ Generate multiple series for each input """
+
+        if "action" in self._params:
+            return self._generate_multi()    
+
         include_tags_any_ids = data.resolve_tags(self._include["any"], create=False)
         include_tags_all_ids = data.resolve_tags(self._include["all"], create=False)
         exclude_tags_ids = data.resolve_tags(self._exclude, create=False)
@@ -81,7 +87,33 @@ class Process (ProcessBase):
                 raise Exception("Unknown mode parameter %s" % self._params["mode"])
 
             with data.get_reader_pandas(series) as reader:
-                filtered = reader.df.tz_convert(pytz.timezone(timezone)).between_time(open_time, close_time).dropna().tz_convert(pytz.UTC)
+
+                if "action" in self._params:
+                    ohlc_sampler = { "open":"first"
+                          , "high":"max"
+                          , "low":"min"
+                          , "close":"last"
+                          , "volume":"sum"
+                          , "openInterest":"sum"
+                          , "actual":"first" }
+                    if len(reader.df) > 0:
+                        filtered = reader.df.tz_convert(pytz.timezone(timezone))
+                        #first = common.Time.time(filtered.head(1).index[0].value).strftime("%Y-%m-%d ") + hours_info["open"]
+                        #last = common.Time.time(filtered.tail(1).index[0].value).strftime("%Y-%m-%d ") + hours_info["close"]
+                        #dates = pd.date_range(start=first, end=last, freq='24H')
+                        #filtered = filtered.groupby(dates)
+                        #print(filtered)
+                        #print(filtered.head())
+                        seconds = int(hours_info["open"][:2])*60*60 + int(hours_info["open"][3:])*60
+                        #print(hours_info["open"])
+                        #print(seconds)
+                        #print(filtered.head())
+                        filtered = filtered.shift(periods=seconds*-1, freq="S").resample("1D", how=ohlc_sampler).dropna(how="all")
+                        #print(filtered.head())
+                        #raise "abc"
+                        #filtered = filtered.agg(ohlc_sampler).dropna(how="all").tz_convert(pytz.UTC)
+                else:
+                    filtered = reader.df.tz_convert(pytz.timezone(timezone)).between_time(open_time, close_time).dropna(how="all").tz_convert(pytz.UTC)
 
                 if len(filtered) > 0:
                     first = filtered.head(1).index[0].value

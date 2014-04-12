@@ -52,6 +52,7 @@ pip install pyyaml
 pip install pywebhdfs
 pip install python3-memcached
 pip install redis
+pip install python-redis-lock
 pip install Celery
 pip install -U kombu==3.0.12
 

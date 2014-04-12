@@ -14,6 +14,15 @@ tauApp.controller("SeriesSummary", function ($scope, $http) {
 
 tauApp.controller("SeriesViews", function ($scope, $http) {
     $scope.series = [];
+    $scope.timezoneExchange = {value: "exchange", label: "exchange"};
+    $scope.timezoneOptions = [{value: "UTC", label: "UTC"}, $scope.timezoneExchange];
+
+    var params = { params: { action: "list", item: "timezone", filter: "[]" } };
+    $http.get("api/task", params).success(function(data) {
+        data.forEach(function(zone) {
+            $scope.timezoneOptions.push({value: zone, label: zone});
+        });
+    });
 
     $scope.$on("view-series", function (event, result) { 
         $scope.series.push(result); 
@@ -26,6 +35,10 @@ tauApp.controller("SeriesViews", function ($scope, $http) {
 
 tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $q) {
 
+    $scope.timezoneOption = "UTC";
+    $scope.timezoneOptions = $scope.$parent.timezoneOptions;
+    $scope.loading = true;
+
     $scope.state = {
         view: "plot",
         current: 0,
@@ -35,6 +48,7 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
         shadow_date: 0,
         refresh: false,
         data: null,
+        series_data: null,
         summary: null
     };
 
@@ -98,6 +112,7 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
     $scope.$watch("state.refresh", function () {
         if (!$scope.state.refresh) return;
         $scope.state.refresh = false;
+        $scope.loading = true;
 
         var format = $scope.instance.tags.format;
         if (format == "ohlc") { format = "ohlcv"; }
@@ -111,7 +126,7 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
                          };
             $http.get("/api/summary", params).success( function (data) {
                 $scope.state.summary = data;
-                console.log("REFRESH SUMMARY");
+                $scope.timezoneExchange.label = "exchange (" + data.timezone + ")";
                 $scope.state.refresh = true;
             });
         }
@@ -124,13 +139,21 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
                                }
                      };
             $http.get("/api/data", params).success( function (data) {
-                console.log("REFRESH DATA");
                 $scope.state.data = data;
+                $scope.state.series_data = data.data;
+                $scope.loading = false;
             });
         }
     });
 
     $scope.plotOhlc = function (renderTarget, attrs, series, updateFunction) {
+
+        var indata = [];
+        var index = 0;
+        $scope.state.series_data.forEach(function (tick) {
+            indata.push({x:tick[0], open:tick[1], high:tick[2], low:tick[3], close:tick[4], index:index});
+            index += 1;
+        });
 
         var options = {
             credits: { enabled: false },
@@ -208,8 +231,9 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
             series: [{  
                 type: "ohlc",
                 name: "OHLC",
-                data : $scope.state.data.data,
-                dataGrouping : { enabled: false }
+                data : indata,
+                dataGrouping : { enabled: false },
+                point: { events: { click: function () { $scope.selectPoint(this); } } }
             },
             {
                 type: "line",
@@ -254,7 +278,7 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
 
         var indata = [];
         var index = 0;
-        $scope.state.data.data.forEach(function (tick) {
+        $scope.state.series_data.forEach(function (tick) {
             if (tick[6] != "") {
                 indata.push({x:tick[0], y:tick[1], f: tick[6], fd: tick[7], index: index, marker: { radius: 2, fillColor: "red" }});
             } else { indata.push({x:tick[0], y:tick[1], f: tick[6], fd: tick[7], index: index, marker: { enabled: false }}); }
@@ -335,7 +359,7 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
         updateFunction(options);             
     };
     
-    $scope.plotHandler = function (renderTarget, attrs, series, updateFunction) {
+    $scope.plotHandler = function (renderTarget, attrs, series, updateFunction) { 
         if (series.tags.format == "tick")
         {
             return $scope.plotTick(renderTarget, attrs, series, updateFunction);
@@ -349,28 +373,37 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
     $scope.gridHandler = function (series) { //(renderTarget, attrs, series, updateFunction) {
         if (series.tags.format == "tick")
         {
-            $scope.gridOptions = { data: "state.data.data", 
+            $scope.copy = function (row){
+                //console.log(row.entity);
+                //row.selected = false;
+                //$scope.gridOptions.selectAll(false);
+                return { "title": "detail",
+                 "titlestyle": "",
+                 "content": "<pre>" + JSON.stringify({time: row.entity[0]*1000000.0, price: row.entity[1], volume: row.entity[2], event: row.entity[3], qualifier: row.entity[4], acc_volume: row.entity[5]}) + "</pre>" }; 
+            };
+            $scope.gridOptions = { data: "state.series_data", 
                      enableSorting: false,
                      enableColumnResize: true,
                      rowHeight: 20,
-                     columnDefs: [{field: "0", displayName: "Time", width: "10%", cellTemplate: "<div cell-datetime value=row.entity[0]></div>"}, 
-                                  {field: "1", displayName: "Price", width: "5%"},
-                                  {field: "2", displayName: "Volume", width: "5%"},
-                                  {field: "3", displayName: "Event", cellTemplate: "<div cell-event value=row.entity[3]></div>"},
-                                  {field: "4", displayName: "Qualifier", width: "35%"},
-                                  {field: "5", displayName: "Acc. Volume", width: "5%"},
-                                  {field: "6", displayName: "Filter Class", width: "20%"},
-                                  {field: "7", displayName: "Filter Detail", width: "20%"}
+                     columnDefs: [{displayName: "", width: "2%", cellTemplate: "<span data-animation='am-fade' data-html='true' data-container='body' bs-modal='copy(row)' data-template='status-modal.html'>&nbsp<i class='fa fa-ellipsis-vertical' style='font-size: 100%;'>&nbsp;</i>&nbsp;</span>"},
+                                  {field: "0", displayName: "Time", width: "8%", cellTemplate: "<div cell-datetime cellclass='' value=row.entity[0]></div>"}, 
+                                  {field: "1", displayName: "Price", width: "6%"},
+                                  {field: "2", displayName: "Volume", width: "3%"},
+                                  {field: "3", displayName: "Event", width: "6%", cellTemplate: "<div cell-event value=row.entity[3]></div>"},
+                                  {field: "4", displayName: "Qualifier", width: "30%"},
+                                  {field: "5", displayName: "Acc. Volume", width: "3%"},
+                                  {field: "6", displayName: "Filter Class", width: "10%"},
+                                  {field: "7", displayName: "Filter Detail", width: "23%"}
                                  ]
                    };
         }
         else
         {
-            $scope.gridOptions = { data: "state.data.data",
+            $scope.gridOptions = { data: "state.series_data",
                      enableSorting: false,
                      enableColumnResize: true,
                      rowHeight: 20,
-                     columnDefs: [{field: "0", displayName: "Time", width: "25%", cellTemplate: "<div cell-datetime value=row.entity[0]></div>"},
+                     columnDefs: [{field: "0", displayName: "Time", width: "25%", cellTemplate: "<div cell-datetime cellclass='' value=row.entity[0]></div>"},
                                   {field: "1", displayName: "Open", width: "15%"},
                                   {field: "2", displayName: "High", width: "15%"},
                                   {field: "3", displayName: "Low", width: "15%"},
@@ -386,13 +419,25 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
 
 });
 
-tauApp.controller("DataProcess", function ($scope) {
+tauApp.controller("DataProcess", function ($scope, $http) {
 
     $scope.view = null;
+    $scope.workers_ondemand = [];
 
     $scope.show = function (view) {
         $scope.view = view;
     };
+
+    $scope.update = function () {
+        var params = { params: { action: "list" } };
+        $http.get("api/worker", params).success(function(data) {
+            $scope.workers_ondemand = data.droplets;
+        });
+    };
+
+    $scope.update();
+    //var updatePromise = $interval($scope.update, 60000);
+    //$scope.$on("$destroy", function () { $interval.cancel(updatePromise); });
 
 });
 
@@ -452,27 +497,46 @@ tauApp.controller("TaskStatus", function ($scope, $http, $interval) {
                  enableColumnResize: true,
                  enableRowSelection: false,
                  canSelectRows: false,
-                 rowHeight: 30,
+                 rowHeight: 25,
                  columnDefs: [{field: "node",
                                displayName: "Node",
-                               cellTemplate: "<span class='cell-div'>{{row.entity.node}}</span>",
-                               enableCellEdit: true,
-                               width: "30%"
+                               cellTemplate: "<span class='cell-div cell-small'>{{row.entity.node}}</span>",
+                               width: "7%"
                               },
                               {field: "name",
                                displayName: "Task",
-                               cellTemplate: "<span class='cell-div'>{{row.entity.name}}</span>",
-                               enableCellEdit: true,
-                               width: "30%"
+                               cellTemplate: "<span class='cell-div cell-small'>{{row.entity.name}}</span>",
+                               width: "12%"
+                              },
+                              {field: "arguments",
+                               displayName: "Arguments",
+                               cellTemplate: "<span class='cell-div cell-small' title='{{row.entity.arguments}}'>{{row.entity.arguments}}</span>",
+                               width: "27%"
+                              },
+                              {field: "task_id",
+                               displayName: "Task ID",
+                               cellTemplate: "<span class='cell-div cell-small'>{{row.entity.task_id}}</span>",
+                               width: "15%"
+                              },
+                              {field: "instance_id",
+                               displayName: "Instance ID",
+                               cellTemplate: "<span class='cell-div cell-small'>{{row.entity.instance_id}}</span>",
+                               width: "15%"
                               },
                               {field: "time_start",
                                displayName: "Started",
-                               width: "20%",
-                               cellTemplate: "<div class='cell-div' cell-ticktime value='row.entity.time_start'></div>"}
-                             ,{field: "",
+                               width: "9%",
+                               cellTemplate: "<div cell-ticktime class='cell-none' cellclass='cell-small' value='row.entity.time_start'></div>"
+                              },
+                              {field: "time_elapsed",
+                               displayName: "Elapsed",
+                               width: "5%",
+                               cellTemplate: "<span class='cell-div cell-small'>{{row.entity.time_elapsed}}</span>"
+                              },
+                              {field: "",
                                displayName: "Progress",
-                               width: "18%",
-                               cellTemplate: "<span class='cell-div' ng-if='row.entity.status!=\"PROGRESS\"'><span class='label' ng-class='statusLabel(row.entity.status)' data-animation='am-fade' data-html='true' data-container='body' bs-modal='statusDetail(row.entity)' data-template='status-modal.html'>{{row.entity.status}}</span></span><div class='progress progress-striped active' ng-if='row.entity.status==\"PROGRESS\"' style='margin-top: 5px; margin-left: 20px; margin-right: 20px;'><div style='position: absolute; margin-left: 70px; margin-top: 0px; color: rgba(60, 60, 60, 0.95); font-size: 85%;'>{{row.entity.per_second}}/sec (about {{row.entity.estimate}})</div><div class='progress-bar' role='progressbar' aria-valuemin='0' aria-valuemax='100' style='width: {{row.entity.progress}}%'></div></div>"}
+                               width: "9%",
+                               cellTemplate: "<span class='cell-div' ng-if='row.entity.status!=\"PROGRESS\"'><span class='label' ng-class='statusLabel(row.entity.status)' data-animation='am-fade' data-html='true' data-container='body' bs-modal='statusDetail(row.entity)' data-template='status-modal.html'>{{row.entity.status}}</span></span><div class='progress progress-striped active' ng-if='row.entity.status==\"PROGRESS\"' style='margin-top: 1px; margin-left: 5px; margin-right: 5px;'><div style='position: absolute; margin-left: 10px; margin-top: 0px; color: rgba(60, 60, 60, 0.95); font-size: 70%;'>{{row.entity.per_second}}/sec (about {{row.entity.estimate}})</div><div class='progress-bar' role='progressbar' aria-valuemin='0' aria-valuemax='100' style='width: {{row.entity.progress}}%'></div></div>"}
                              ]
         };
         //popover-placement='left' popover-unsafe-html='<div class=\"status-popover\">{{row.entity.result}}</div>' popover-trigger='mouseenter' popover-append-to-body='true'
@@ -605,8 +669,81 @@ tauApp.controller("TaskConfiguration", function ($scope, $http, $q) {
                              ,{field: "last_modified",
                                displayName: "Last Modified",
                                width: "20%",
-                               cellTemplate: "<div cell-ticktime class='small-text' value=row.entity.last_modified></div>"}
+                               cellTemplate: "<div cell-ticktime cellclass='small-text' value=row.entity.last_modified></div>"}
                              ]
+        };
+        return $scope.gridOptions;
+    };
+});
+
+tauApp.controller("WorkersOnDemand", function ($scope, $http, $interval) {
+
+    $scope.workers = [];
+
+    $scope.update = function () {
+        var params = { params: { action: "list" } };
+        $http.get("api/worker", params).success(function(data) {
+            $scope.workers = data.droplets;
+            for (index = 0; index < data.droplets.length; index++) {
+                data.droplets[index].cost = (moment().diff(data.droplets[index].created_at) / 1000 * 0.00006614).toFixed(2);
+            }
+        });
+    };
+
+    $scope.add = function () {
+        var params = { params: { action: "create" } };
+        $http.get("api/worker", params).success(function(data) {
+            alert(JSON.stringify(data));
+        });
+    };
+
+    $scope.delete = function (v) {
+        $scope.gridOptions.selectedItems.forEach(function (worker) {
+            var params = { params: { action: "destroy", target: worker.id } };
+            $http.get("api/worker", params).success(function(data) {
+                alert(JSON.stringify(data));
+            });
+        });
+    };
+
+    $scope.update();
+    var updatePromise = $interval($scope.update, 60000);
+    $scope.$on("$destroy", function () { $interval.cancel(updatePromise); });    
+
+    $scope.grid = function () {
+        $scope.isEmptyObject = function (obj) { return $.isEmptyObject(obj); };
+        $scope.gridOptions = { data: "workers",
+                 selectedItems: [],
+                 enableSorting: false,
+                 enableColumnResize: true,
+                 enableRowSelection: true,
+                 canSelectRows: true,
+                 rowHeight: 30,
+                 columnDefs: [{field: "name",
+                               displayName: "Name",
+                               cellTemplate: "<span class='cell-div cell-small'>{{row.entity.name}}</span>",
+                               width: "20%"
+                              }
+                             ,{field: "ip_address",
+                               displayName: "IP Address",
+                               cellTemplate: "<span class='cell-div cell-small'>{{row.entity.ip_address}}</span>",
+                               width: "20%"
+                              }
+                             ,{field: "status",
+                               displayName: "Status",
+                               cellTemplate: "<span class='cell-div cell-small'>{{row.entity.status}}</span>",
+                               width: "20%"
+                              }
+                             ,{field: "created_at",
+                               displayName: "Created",
+                               cellTemplate: "<span class='cell-div cell-small'>{{row.entity.created_at}}</span>",
+                               width: "20%"
+                              }
+                             ,{field: "cost",
+                               displayName: "Current Cost ($)",
+                               cellTemplate: "<span class='cell-div cell-small'>{{row.entity.cost}}</span>",
+                               width: "20%"
+                              }]
         };
         return $scope.gridOptions;
     };
@@ -701,7 +838,7 @@ tauApp.controller("Symbol", function ($scope, $http) {
                              ,{field: "last_modified",
                                displayName: "Last Modified",
                                width: "20%",
-                               cellTemplate: "<div cell-ticktime class='small-text' value=row.entity.last_modified></div>"}
+                               cellTemplate: "<div cell-ticktime cellclass='small-text' value=row.entity.last_modified></div>"}
                              ]
         };
         return $scope.gridOptions;
@@ -721,6 +858,15 @@ tauApp.controller("TaskProcess", function ($scope, $http) {
         $http.get("api/task", params).success(function(data) {
             $scope.items = data;
         });
+    };
+
+    $scope.runProcess = function () {
+        $scope.gridOptions.selectedItems.forEach(function (item) {
+            var params = { params: { action: "run", target: "task.process.generate", args: '[\'{"process_id": ' + item.id + ',"force": true }\']' } };
+            $http.get("api/task", params).success(function(data) {
+                alert("done");
+            });
+        }); 
     };
 
     $scope.addProcessHandler = function (clone) {
@@ -800,7 +946,7 @@ tauApp.controller("TaskProcess", function ($scope, $http) {
                              ,{field: "last_modified",
                                displayName: "Last Modified",
                                width: "10%",
-                               cellTemplate: "<div cell-ticktime class='small-text' value=row.entity.last_modified></div>"}
+                               cellTemplate: "<div cell-ticktime cellclass='small-text' value=row.entity.last_modified></div>"}
                              ]
         };
         return $scope.gridOptions;
@@ -848,10 +994,11 @@ tauApp.controller("SeriesSearch", function ($rootScope, $scope, $http, $q, $time
     $scope.search_result = {};
     $scope.sortOrder = [];
     $scope.sortOrderOptions = [];
+    $scope.loading = false;
 
     $scope.$watch("sortOrder", function (after, before) {
         if ($.isArray($scope.search_result) && $scope.sortOrder.length > 0) {
-
+            $scope.loading = true;
             var tagCompare = function (v1, v2, tag) {
                 if (tag in v1.tags && tag in v2.tags) {
                     if ($.isNumeric(v1.tags[tag])) {
@@ -899,6 +1046,7 @@ tauApp.controller("SeriesSearch", function ($rootScope, $scope, $http, $q, $time
                    .thenBy(function (v1, v2) { return tagCompare(v1, v2, $scope.sortOrder[3]); })
                 );
             }
+            $scope.loading = false;
             /*
             $scope.search_result.sort(function (a, b) {
                 var sort = 0;
@@ -915,6 +1063,7 @@ tauApp.controller("SeriesSearch", function ($rootScope, $scope, $http, $q, $time
     }, true);
 
     $scope.search = function () {
+        $scope.loading = true;
         $scope.sortOrder = [];
         $http.get("/api/find", {params: {tags: JSON.stringify($scope.tags)}}).success( function(data) {
             $scope.search_result = data;
@@ -945,16 +1094,85 @@ tauApp.controller("SeriesSearch", function ($rootScope, $scope, $http, $q, $time
             sortOptions.slice(0, 4).forEach(function (val) {
                 $scope.sortOrderOptions.push({value: val.key, label: val.key});
             });
+            $scope.loading = false;
             //$scope.sortOrderOptions = [{value: "year", label: "year"},{value: "month", label: "month"}];
         });
     };
 
     $scope.highlight = function (result, state) {
-        result.ng_selected = state;
+        if (state != result.ng_selected) result.ng_selected = state;
     };
 
     $scope.view = function (result) {
         $rootScope.$broadcast("view-series", result);
+    };
+
+    $scope.selected = [];
+    $scope.futureSelected = false;
+    $scope.future = { tags: {}, months: [], year_from: 9999, year_to: 0, split: "none" };
+    $scope.months = [];
+    $scope.monthOptions = [];//{value: "exchange", label: "exchange"};
+    $scope.splitOptions = [ {value: "month", label: "Month Per Sheet"},
+                            {value: "year", label: "Year Per Sheet"},
+                            {value: "none", label: "One Sheet"} ];
+    $scope.timezoneOptions = [{value: "UTC", label: "UTC"}, $scope.timezoneExchange];
+    $scope.exceldown = function () {
+        window.external.download(JSON.stringify($scope.selected));
+    };
+    $scope.futuredown = function() {
+        window.external.futureDownload(JSON.stringify($scope.future));
+    };
+
+    $scope.$watchCollection("selected", function () {
+        if ($scope.selected.length == 0) {
+            $scope.futureSelected = false;
+        }        
+        else {
+            var first = $scope.selected[0];
+            if (first.tags.hasOwnProperty("year") && first.tags.hasOwnProperty("month"))
+            {
+                var allContracts = $.extend({}, first.tags);
+                allContracts.year = "*"; allContracts.month = "*";
+                $scope.future.tags = allContracts;
+                $http.get("/api/find", {params: {tags: JSON.stringify(allContracts)}}).success( function(data) {
+                    $scope.future.year_from = 9999; $scope.future.year_to = 0;
+                    $scope.future.split = "none"; $scope.future.months = []; $scope.monthOptions = [];
+                    data.forEach(function (value) {
+                        $scope.future.year_from = Math.min($scope.future.year_from, parseInt(value.tags.year));
+                        $scope.future.year_to = Math.max($scope.future.year_to, parseInt(value.tags.year));
+                        if ($.inArray(parseInt(value.tags.month), $scope.months) < 0) { 
+                            $scope.months.push(parseInt(value.tags.month)); 
+                        }
+                    });
+                    $scope.months.sort(function(l,r){return l > r ? 1 : l < r ? -1 : 0;});
+                    $scope.months.forEach(function (value) {
+                        $scope.monthOptions.push({value: value.toString(), label: value.toString()});
+                    });
+                    $scope.futureSelected = true;
+                });
+            }
+            else { $scope.futureSelected = false; }
+        }
+    }, true);
+
+    $scope.select = function (result, select) {
+        if (select) {
+            var found = false;
+            $.each($scope.selected, function () {
+                if (this.id == result.id) { found = true; return false; }
+            });
+            if (!found) { $scope.selected.push(result); }
+        }
+        else {
+            var found = false;
+            var index = -1;
+            var counter = 0;
+            $.each($scope.selected, function () {
+                if (this.id == result.id) { index = counter; return false; }
+                counter += 1;
+            });
+            if (index >= 0) { $scope.selected.splice(index, 1); }
+        }
     };
     
     $http.get("api/tag").success(function(data) {
@@ -1085,8 +1303,9 @@ tauApp.directive('cellDatetime', function () {
         restrict: 'A',
         replace: true,
         transclude: true,
-        scope: { value: '=' },
-        template: "<div class='ngCellText'>{{formatValue}}</div>",
+        scope: { value: '=',
+                 cellclass: '@' },
+        template: "<div class='ngCellText {{cellclass}}'>{{formatValue}}</div>",
         link: function (scope, elem, attrs) {
             scope.$watch("value", function (newval) {
                 if (newval == scope.formatValue) return;
@@ -1101,8 +1320,9 @@ tauApp.directive('cellTicktime', function () {
         restrict: 'A',
         replace: true,
         transclude: true,
-        scope: { value: '=' },
-        template: "<div class='ngCellText'>{{formatValue}}</div>",
+        scope: { value: '=',
+                 cellclass: '@' },
+        template: "<div class='ngCellText {{cellclass}}'>{{formatValue}}</div>",
         link: function (scope, elem, attrs) {
             scope.$watch("value", function (newval) {
                 if (newval == scope.formatValue) return;

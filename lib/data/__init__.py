@@ -26,28 +26,30 @@ def decode_tags (tag_ids):
     return tags    
 
 
-def resolve_tags (tags, create):
+def resolve_tags (tags_list, create):
     """
     Resolve tags to database ids and create if required.
     """
     tagids = []
+    if isinstance(tags_list, (dict,)):
+        tags_list = [tags_list]
 
-    for name, value in tags.items():
-        if value == "*": #return any with name
-            with schema.select("tag", schema.table.tag.name==name) as select:
-                for selected in select.all():
-                    tagids.append(selected.id) 
-        else:
-            tag = schema.select_one("tag", schema.table.tag.name==name, schema.table.tag.value==value)
-            if not tag and not create:
-                raise exception.MissingTagException("Tag %s (%s) does not exist" % (name, value))
-            elif not tag:
-                tag = schema.table.tag()
-                tag.name = name
-                tag.value = value
-                schema.save(tag)
-            tagids.append(tag.id)
-
+    for tags in tags_list:
+        for name, value in tags.items():
+            if value == "*": #return any with name
+                with schema.select("tag", schema.table.tag.name==name) as select:
+                    for selected in select.all():
+                        tagids.append(selected.id) 
+            else:
+                tag = schema.select_one("tag", schema.table.tag.name==name, schema.table.tag.value==value)
+                if not tag and not create:
+                    raise exception.MissingTagException("Tag %s (%s) does not exist" % (name, value))
+                elif not tag:
+                    tag = schema.table.tag()
+                    tag.name = name
+                    tag.value = value
+                    schema.save(tag)
+                tagids.append(tag.id)
     return sorted(tagids) 
 
 
@@ -68,7 +70,9 @@ class PandasReader (object):
         Open file and return reader.
         """
         self._store = common.store.read(common.Path.resolve_path(self._path_type, self._series), open_handle=False).__enter__()
-        self._dataframe = pd.read_hdf(self._store.local_path(), key="data")
+        iterator = pd.read_hdf(self._store.local_path(), key="data", iterator=True, chunksize=10000)
+        #iterator.func = lambda start, stop, s=iterator.store.get_storer("data"): s.read_iter(start=start, stop=stop)
+        self._dataframe = iterator.get_values()
         self._dataframe = self._dataframe.set_index(pd.DatetimeIndex(pd.Series(self._dataframe["time"]).astype("datetime64[ns]"), tz="UTC"))
         return self
 
@@ -105,6 +109,17 @@ def get_reader (series):
     if "compute" in tags:
         return compute.ComputeReader(series, tags)
     elif tags["format"] == "ohlc":
+        if series.start == -1 and series.end == -1 and "period" in tags:
+            if tags["period"] in ["1min", "5min", "60min", "1day"]:
+                lookup = {"1min": "1sec", "5min": "1min", "60min": "5min", "1day": "5min"}
+                sample_from = lookup[tags["period"]]
+                common.log.info("Initialising series %s" % series)
+                from lib.process import resample
+                in_tags = tags
+                in_tags["period"] = sample_from
+                in_series = schema.select_one("series", schema.table.series.tags==resolve_tags(in_tags, create=False))
+                resample.Process.impl(in_series.id, {"period": tags["period"]}, {}, tags["period"]) 
+        
         return ohlc.OhlcReader(series)
     elif tags["format"] == "tick":
         return tick.TickReader(series)
@@ -291,6 +306,9 @@ class Reader (object):
         """
         Read data time ordered.
         """
+        if self._table.nrows == 0:
+            return list()
+
         if start == None and stop == None:
             start = 0
             stop = self._table.nrows
@@ -303,6 +321,9 @@ class Reader (object):
         """
         Read data time ordered using an iterator.
         """
+        if self._table.nrows == 0:
+            return list()
+
         if start == None and stop == None:
             start = 0
             stop = self._table.nrows
@@ -546,6 +567,13 @@ class Writer (object):
                         pass #TODO: copy to new table, filter overlap
 
 
+    def rebuild_index (self):
+        self._table.cols.time.remove_index()
+        self._table.cols.time.create_csindex()
+        self._table.autoindex = False
+        self.save()
+        
+
     def save (self):
         """
         Save the file and flush data.
@@ -578,6 +606,10 @@ class Writer (object):
             self._file = open_file(self._store.local_path(), mode=("a" if self._append else "w"), title="")
             if "data" in self._file.root:
                 self._table = self._file.root.data
+                if not self._table.cols.time.is_CSI:
+                    print("REBUILDING")
+                    print(self._table)
+                    self.rebuild_index()
                 self._check_overlap()
             else:
                 self._table = self._file.createTable(self._file.root, 'data', self._description, "data", filters=self._filters)

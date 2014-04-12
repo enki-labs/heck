@@ -22,7 +22,6 @@ class DataFrameWrapper (object):
 
     def __init__ (self, series, no_index=False, resolution=0):
         self.series = series
- 
         with data.get_reader(series) as reader:
             step = 1
             if resolution > 0 and reader.count() > resolution:
@@ -33,10 +32,7 @@ class DataFrameWrapper (object):
             append_temp_times = []
             append_wrapper = None
             self.dframe = None
-            
-
             for row in reader.read_iter(step=step):
-
                 if append_count == 0:
                     if isinstance(row, dict):
                         append_wrapper = lambda x: x
@@ -137,6 +133,5 @@ class ProcessBase (object):
                         del[name]
                 for name, value in self._add.items():
                     tags[name] = value
-                outputs.append(dict(input_last_modified=selected.last_modified, output_tags=tags, output_depend=[selected.id]))
-        return outputs
+                yield dict(input_last_modified=selected.last_modified, output_tags=tags, output_depend=[selected.id])
 

@@ -18,14 +18,19 @@ class Process (ProcessBase):
     def generate (self):
         return self._generate_multi()
  
-   
+
     def run (self, queued, progress):
         print("resample %s" % (queued))
-        series = schema.select_one("series", schema.table.series.id==queued.depend[0])
+        Process.impl(in_series_id=queued.depend[0], add=self._add, remove=self._remove, period=self._params["period"])
+
+
+    @staticmethod
+    def impl (in_series_id, add, remove, period):
+        series = schema.select_one("series", schema.table.series.id==in_series_id)
         tags = data.decode_tags(series.tags)
-        for name, value in self._add.items():
+        for name, value in add.items():
             tags[name] = value
-        for name, value in self._remove.items():
+        for name, value in remove.items():
             if name in tags:
                 del[name]
         write_empty = True
@@ -39,7 +44,8 @@ class Process (ProcessBase):
                           , "volume":"sum"
                           , "openInterest":"sum"
                           , "actual":"first" }
-            resampled = wrapper.dframe.resample(self._params["period"], how=ohlc_sampler).dropna()
+            resampled = wrapper.dframe.resample(period, how=ohlc_sampler)
+            resampled = resampled.dropna(how='all')
             if len(resampled) > 0:
                 first = resampled.head(1).index[0].value
                 last = resampled.tail(1).index[0].value

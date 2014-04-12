@@ -12,8 +12,11 @@ module.exports = function () {
 
         process: function (req, res) {
             res.render("data_process.ejs", {});
-        }
-        
+        },
+
+        search: function (req, res) {
+            res.render("excel_search.ejs", {});
+        }        
     }
 };
 

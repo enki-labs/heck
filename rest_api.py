@@ -1,7 +1,8 @@
 
 import argparse
 import json
-from twisted.internet import reactor
+from twisted.internet import reactor, threads
+from twisted.web import http
 from twisted.web.server import Site
 from twisted.web.resource import Resource
 from twisted.web.server import NOT_DONE_YET
@@ -14,6 +15,7 @@ from sqlalchemy import desc
 from sqlalchemy.sql import and_
 import celery
 import redis
+import datetime
 from datetime import timedelta
 from babel.dates import format_timedelta
 
@@ -23,6 +25,7 @@ from lib import data
 from lib import common
 from lib.process import DataFrameWrapper
 from lib.data import spark
+from lib.proto.matrix_pb2 import Matrix
 
 
 def get_series (args):
@@ -54,18 +57,114 @@ class Data (Resource):
     def __init__ (self):
         super().__init__()
  
-    def render_GET (self, request):
+    def impl_render_GET (self, request):
         series = schema.table.series
 
+        """
         response = dict(data=[], actual=[], volume=[], adj=[], tstart=0, tend=0, istart=0, iend=0)
+        read_series = None
 
-        with schema.select("series", series.id==int(request.args[b"id"][0].decode("utf-8"))) as select:
-            with data.get_reader(select.first()) as reader: 
+        if b"id" in request.args:
+            series_id = int(request.args[b"id"][0].decode("utf-8"))
+            read_series = select_one("series", series.id==series_id)
+            read_format = request.args[b"format"][0].decode("utf-8")
+
+        else:
+            series_tags = {}
+            for tag in request.args[b"tags"][0].decode("utf-8").split(","):
+                tag_parts = tag.split(":")
+                series_tags[tag_parts[0]] = tag_parts[1]
+            read_series = schema.select_one("series", series.tags==data.resolve_tags(series_tags, create=False))
+            read_format = series_tags["format"]
+            if read_format == "ohlc": read_format = "ohlcv"
+
+        if read_series == None:
+            response = dict(error="cannot find series")
+        """
+
+        mode = request.args[b"mode"][0].decode("utf-8") if b"mode" in request.args else "single"
+        if mode == "matrix":
+            params = json.loads(request.args[b"params"][0].decode("utf-8"))
+            series_list = []
+            tags_list = []
+            column_list = []
+            read_format = None
+            for tag_def in request.args[b"tags"][0].decode("utf-8").split("|"):
+                series_tags = {}
+                for tag in tag_def.split(","):
+                    tag_parts = tag.split(":")
+                    series_tags[tag_parts[0]] = tag_parts[1]
+                read_series = schema.select_one("series", series.tags==data.resolve_tags(series_tags, create=False))
+                if read_series == None:
+                    print(series_tags)
+                    continue
+                #    raise Exception("missing series")
+                series_list.append(read_series)
+                tags_list.append(series_tags)
+                if read_format == None:
+                    read_format = series_tags["format"]
+                elif series_tags["format"] != read_format:
+                    raise Exception("incompatible formats")
+            if read_format == "ohlc": read_format = "ohlcv"
+
+            outframe = None
+            index = 0
+            for read_series in series_list:
+                if read_series == None:
+                    pass
+                else:
+                    reader = DataFrameWrapper(read_series)
+                    if "column" in params:
+                        reader.dframe = reader.dframe[params["column"]]
+                    if index == 0:
+                        column_list = reader.dframe.columns.values
+                    reader.dframe.rename(columns=lambda x: "%s_%s" % (index, x), inplace=True)
+                    if index == 0:
+                        outframe = reader.dframe
+                    else: outframe = outframe.join(reader.dframe, how="outer")
+                    index += 1
+
+            if "sort" in params and params["sort"] == "desc":
+                outframe.sort(inplace=True, ascending=False)
+            if "nan" in params:
+                if params["nan"] == "any":
+                    outframe = outframe.dropna(how="any")
+                elif params["nan"] == "all":
+                    outframe = outframe.dropna(how="all")
+
+            matrix = Matrix()
+            header1 = matrix.rows.add()
+            header1.value.append("Date")
+            header2 = matrix.rows.add()
+            header2.value.append("")
+            for tags in tags_list:
+                if "tag_format" in params:
+                    header1.value.append(params["tag_format"].format(**tags))
+                else:
+                    header1.value.append(",".join("%s:%s" % (key, val) for (key, val) in tags.items()))
+                for index in range(1, len(column_list)):
+                    header1.value.append("")
+                for column in column_list:
+                    header2.value.append(column)
+            for row in outframe.to_records():
+                matrix_row = matrix.rows.add()
+                matrix_row.value.append(datetime.datetime.strftime(row[0], "%Y-%m-%d %H:%M:%S"))
+                for index in range(1, len(row)):
+                    matrix_row.value.append(str(row[index]))
+            return {"mime": b"text/proto", "data": matrix.SerializeToString()}
+            
+        else:
+            response = dict(data=[], actual=[], volume=[], adj=[], tstart=0, tend=0, istart=0, iend=0)
+            series_id = int(request.args[b"id"][0].decode("utf-8"))
+            read_series = schema.select_one("series", series.id==series_id)
+            read_format = request.args[b"format"][0].decode("utf-8")
+
+            with data.get_reader(read_series) as reader: 
                 rows = reader.count()
                 from_index = max(0, int(request.args[b"start"][0].decode("utf-8"))) if b"start" in request.args else 0
                 to_index = min(int(request.args[b"end"][0].decode("utf-8")), rows) if b"end" in request.args else rows
                 from_time = int(request.args[b"starttime"][0].decode("utf-8")) if b"starttime" in request.args else None
-                read_format = request.args[b"format"][0].decode("utf-8")
+                out_format = request.args[b"out"][0].decode("utf-8") if b"out" in request.args else "json"
 
                 if from_time:
                     diff = to_index - from_index
@@ -121,12 +220,30 @@ class Data (Resource):
                         response["tend"] = response["data"][-1][0]
                         response["istart"] = int(from_index)
                         response["iend"] = int(to_index)
-        
+            return {"mime": b"text/json", "data": json.dumps(response).encode()}
+        #common.log.info("write result")
+        #request.setHeader(b'Content-Type', b'text/json')
+        #request.write(json.dumps(response).encode())
+        #common.log.info("write complete")
+        return response
+
+    def render_GET (self, request):
+        deferred = threads.deferToThread(self.impl_render_GET, request)
+        deferred.addCallback(lambda resp, req=request: self.respond(req, resp))
+        return NOT_DONE_YET
+
+    def render_POST (self, request):
+        request.args = http.parse_qs(request.content.read(), 1)
+        deferred = threads.deferToThread(self.impl_render_GET, request)
+        deferred.addCallback(lambda resp, req=request: self.respond(req, resp))
+        return NOT_DONE_YET
+
+    def respond (self, request, response):
         common.log.info("write result")
-        request.setHeader(b'Content-Type', b'text/json')
-        request.write(json.dumps(response).encode())
+        request.setHeader(b'Content-Type', response["mime"])
+        request.write(response["data"])
         common.log.info("write complete")
-        return b""            
+        request.finish()
 
     def getChild (self, name, request):
         return self
@@ -199,11 +316,20 @@ class Find (Resource):
 
     def render_GET (self, request):
         search_tags = json.loads(request.args[b"tags"][0].decode("utf-8"))
-        search_tags_ids = data.resolve_tags(search_tags, create=False)
+
+        all_tags = {}
+        any_tags = {}
+        for k, v in search_tags.items():
+            if v == "*": any_tags[k] = v
+            else: all_tags[k] = v
+        all_tags_ids = data.resolve_tags(all_tags, create=False)
+        any_tags_ids = data.resolve_tags(any_tags, create=False)
+        if len(any_tags_ids) == 0: any_tags_ids = all_tags_ids
+
         series = schema.table.series
         series_list = []
-        with schema.select("series", series.tags.contains(search_tags_ids)) as select:
-            for s in select.limit(100).all():
+        with schema.select("series", series.tags.contains(all_tags_ids), series.tags.overlap(any_tags_ids)) as select:
+            for s in select.limit(1000).all():
                 series_list.append({"id":s.id, "symbol":s.symbol, "tags":data.decode_tags(s.tags)})
         request.setHeader(b'Content-Type', b'text/json')
         request.write(json.dumps(series_list).encode())
@@ -302,7 +428,7 @@ class Worker (Resource):
             if action == "create":
                 params = {"name": worker_name.acquire(),
                           "size_slug": "16gb",
-                          "image_id": 2524371,
+                          "image_id": 2651918,
                           "region_slug": "ams2",
                           "client_id": args.do_client,
                           "api_key": args.do_key}           
@@ -314,7 +440,7 @@ class Worker (Resource):
                 target = request.args[b"target"][0].decode("utf-8")
                 params = {"client_id": args.do_client,
                           "api_key": args.do_key,
-                          "scrub_data": true}
+                          "scrub_data": True}
                 response = requests.get("https://api.digitalocean.com/droplets/%s/destroy" % target, params=params)
                 result = response.json()
 
@@ -561,6 +687,19 @@ class Task (Resource):
                     task_info = self._celery.backend.get_task_meta(task[0])
                     task_info["date_done"] = common.Time.tick(task_info["date_done"])
                     result["task"].append(task_info)
+
+        elif action == "run":
+            target = request.args[b"target"][0].decode("utf-8")
+            args = request.args[b"args"][0].decode("utf-8")
+            #from task import inbound
+            #from task import process
+            #self.apply_async(queue="control", countdown=30)
+            #celery call {task.inbound.update} --config=task_config --
+            import os
+            command = 'celery -b "redis://:jdk9dD0knn8md922XkdWQ980D9dkSD90S809dk@localhost:6379/0" call %s --queue=control --args=%s' % (target, args)
+            print(command)
+            os.system(command)
+            
         
         request.setHeader(b'Content-Type', b'text/json')
         request.write(json.dumps(result).encode())

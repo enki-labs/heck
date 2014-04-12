@@ -69,6 +69,8 @@ app.post("/login",
 passport.authenticate("local"),
 function (req, res) { res.redirect("/"); });
 
+app.get("/excel-search", data().search);
+
 app.get("/", ensureLoggedIn("index.html"), data().view);
 
 app.get("/data-view", ensureLoggedIn("index.html"), data().view);
@@ -76,12 +78,18 @@ app.get("/data-view", ensureLoggedIn("index.html"), data().view);
 app.get("/data-process", ensureLoggedIn("index.html"), data().process);
     
 var request = require("request");
-app.get(/^\/api\/.*/, ensureLoggedIn("index.html"), function (req, res)
+//app.get(/^\/api\/.*/, ensureLoggedIn("index.html"), function (req, res)
+app.get(/^\/api\/.*/, function (req, res)
 {
     request(url.resolve(args.backend, req.url)).pipe(res);
 });
 
- 
+app.post(/^\/api\/.*/, function (req, res)
+{
+    req.pipe(request.post(url.resolve(args.backend, req.url))).pipe(res);
+    //request.post({url: url.resolve(args.backend, req.url), headers: req.headers, body: req.body}).pipe(res);
+});
+
 // Server
 app.listen(3000, function(){
   console.log("taustack running");

@@ -96,7 +96,7 @@ tagsInput.directive('tagsInput', ["$timeout","$document","tagsInputConfig", func
                 addOnSpace: [Boolean, false],
                 addOnComma: [Boolean, true],
                 addOnBlur: [Boolean, true],
-                allowedTagsPattern: [RegExp, /^[a-zA-Z0-9\s\:]+$/],
+                allowedTagsPattern: [RegExp, /^[a-zA-Z0-9\*\s\: ]+$/],
                 enableEditingLastTag: [Boolean, false],
                 minTags: [Number],
                 maxTags: [Number],

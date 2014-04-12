@@ -12,7 +12,8 @@
         <script src="http://code.highcharts.com/stock/highstock.js" type="text/javascript"></script>
         <script src="http://code.highcharts.com/stock/highcharts-more.js" type="text/javascript"></script>
         <script src="http://code.highcharts.com/stock/modules/exporting.js" type="text/javascript"></script>
-        <script src="//cdnjs.cloudflare.com/ajax/libs/ng-grid/2.0.7/ng-grid.js" type="text/javascript"></script>
+        <!-- <script src="//cdnjs.cloudflare.com/ajax/libs/ng-grid/2.0.7/ng-grid.js" type="text/javascript"></script> -->
+        <script src="js/ng-grid.js" type="text/javascript"></script>
         <link rel="stylesheet" type="text/css" href="//cdnjs.cloudflare.com/ajax/libs/ng-grid/2.0.7/ng-grid.css"></link>
         <script src="//cdnjs.cloudflare.com/ajax/libs/angular-ui/0.4.0/angular-ui.min.js" type="text/javascript"></script>
         <link rel="stylesheet" type="text/css" href="//cdnjs.cloudflare.com/ajax/libs/angular-ui/0.4.0/angular-ui.min.css"></link>
@@ -44,6 +45,9 @@
                         <div class="panel-inner">
                             <tags-input ng-model="tags"
                                         custom-class="tag-search"
+                                        add-on-space="false"
+                                        add-on-comma="false"
+                                        add-on-blur="false"
                                         placeholder="Add search tags...">
                                 <auto-complete source="tag_autocomplete($query)" 
                                                source_value="tag_autocomplete($query)" 
@@ -64,9 +68,10 @@
                                 </button>
                             </div>
                             <div class="search-list" ng-if="search_result.length">
+                                <div style="height: 100px; width:100%; z-index: 1000; position: absolute; top: 0; right: 0; background: url(img/load.gif) no-repeat center scroll;" ng-if="loading"></div>
                                 <div class="search-result" ng-repeat="result in search_result" 
                                                            ng-class="result.ng_selected ? 'search-result-selected' : 'not-selected'" 
-                                                           ng-mouseenter="highlight(result,true)" 
+                                                           ng-mouseenter="highlight(result, true)" 
                                                            ng-mouseleave="highlight(result, false)" 
                                                            ng-dblclick="view(result)">
                                     <span class="label label-primary search-result-label" ng-repeat="(name, value) in result.tags">{{name}}:{{value}}</span> 
@@ -95,17 +100,25 @@
                                 </div>
                                 <button class="btn btn-primary btn-xs" type="button" ng-click="move(1)"><i class="fa fa-forward icon-white"></i></button>
                                 <button class="btn btn-primary btn-xs" type="button" ng-click="end()"><i class="fa fa-fast-forward icon-white"></i></button>
-                                <button class="btn btn-primary btn-xs" type="button" ng-click="unzoom()"><i class="fa fa-search-minus icon-white"></i></button>
-                                <button class="btn btn-primary btn-xs" type="button" ng-click="toggle()"><i class="fa fa-eye icon-white"></i></button>
-                                <button class="btn btn-primary btn-xs" type="button" ng-click="toggle(true)"><i class="fa fa-eye-slash icon-white"></i></button>
+                                <button class="btn btn-primary btn-xs" type="button" ng-click="unzoom()"><i class="fa fa-search-minus icon-white"> unzoom</i></button>
+                                <button class="btn btn-primary btn-xs" type="button" ng-click="toggle()"><i class="fa fa-eye icon-white"> toggle</i></button>
+                                <button class="btn btn-primary btn-xs" type="button" ng-click="toggle(true)"><i class="fa fa-eye-slash icon-white"> split</i></button>
                                 <div class="input-group">
                                     <span class="input-group-addon">
                                     <i class="fa fa-calendar icon-white"></i> date
                                     </span><input style="width: 90px;" type="text" name="state.date" ng-model="state.date" ng-pattern="/[0-9]+$/" ng-change="dateChange()">
                                 </div>
+                                <span class="input-group-addon" style="border-radius: 3px;">timezone <button type="button" class="btn btn-primary btn-xs" style="font-size: 80%;" ng-model="timezoneOption" 
+                                                      data-html="1" data-animation="am-flip-x" 
+                                                      data-sort="0" data-placeholder="timezone" 
+                                                      data-template="tag-sort-select.html"
+                                                      ng-options="icon.value as icon.label for icon in timezoneOptions" bs-select>
+                                Action <span class="caret"></span></span>
+                                </button>
                             </div>
                         </div>
                         <div class="panel-inner">
+                            <div style="height: 500px; width:100%; z-index: 1000; position: absolute; top: 0; right: 0; background: url(img/load.gif) no-repeat center scroll;" ng-if="loading"></div>
                             <stock ng-if="state.view == 'plot' || state.view == 'plot_grid'" series="instance" handler="plotHandler" watcher="state.data" height="500"></stock>
                             <div class="price-grid" style="height: 500px;" ng-if="state.view == 'grid' || state.view == 'plot_grid'" ng-grid="gridHandler(instance)"></div>
                         </div>
