@@ -26,6 +26,7 @@ from lib import common
 from lib.process import DataFrameWrapper
 from lib.data import spark
 from lib.proto.matrix_pb2 import Matrix
+from lib import scripting
 
 
 def get_series (args):
@@ -83,6 +84,7 @@ class Data (Resource):
         """
 
         mode = request.args[b"mode"][0].decode("utf-8") if b"mode" in request.args else "single"
+        print("mode=%s" % mode)
         if mode == "matrix":
             params = json.loads(request.args[b"params"][0].decode("utf-8"))
             series_list = []
@@ -158,13 +160,23 @@ class Data (Resource):
             series_id = int(request.args[b"id"][0].decode("utf-8"))
             read_series = schema.select_one("series", series.id==series_id)
             read_format = request.args[b"format"][0].decode("utf-8")
+            from_index = max(0, int(request.args[b"start"][0].decode("utf-8"))) if b"start" in request.args else 0
+            to_index = int(request.args[b"end"][0].decode("utf-8")) if b"end" in request.args else rows
+            from_time = int(request.args[b"starttime"][0].decode("utf-8")) if b"starttime" in request.args else None
+            out_format = request.args[b"out"][0].decode("utf-8") if b"out" in request.args else "json"
+            print("format=%s" % read_format)
+
+            if read_format == "transform":
+                if last_response["val"]:
+                    response = last_response["val"]
+                else: 
+                    response = scripting.transform(json.loads(request.args[b"script"][0].decode("utf-8")), read_series, read_format, from_index, to_index)
+                    last_response["val"] = response
+                return {"mime": b"text/json", "data": json.dumps(response).encode()}
 
             with data.get_reader(read_series) as reader: 
                 rows = reader.count()
-                from_index = max(0, int(request.args[b"start"][0].decode("utf-8"))) if b"start" in request.args else 0
-                to_index = min(int(request.args[b"end"][0].decode("utf-8")), rows) if b"end" in request.args else rows
-                from_time = int(request.args[b"starttime"][0].decode("utf-8")) if b"starttime" in request.args else None
-                out_format = request.args[b"out"][0].decode("utf-8") if b"out" in request.args else "json"
+                to_index = min(to_index, rows)
 
                 if from_time:
                     diff = to_index - from_index
@@ -784,7 +796,7 @@ celery_client.config_from_object({"BROKER_URL": args.celery_broker,
 
 memcache = memcache.Client(['127.0.0.1:11211'], debug=0)
 redis_client = redis.StrictRedis(host='localhost', port=6379, db=0, password=args.celery_pass)
-
+last_response = { "val": None }
 
 class WorkerName (object):
     def __init__ (self):

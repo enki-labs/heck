@@ -20,7 +20,7 @@ class DataFrameWrapper (object):
     Opens a data series and reads into a dataframe.
     """
 
-    def __init__ (self, series, no_index=False, resolution=0):
+    def __init__ (self, series, no_index=False, resolution=0, from_index=0, to_index=None):
         self.series = series
         with data.get_reader(series) as reader:
             step = 1
@@ -32,7 +32,7 @@ class DataFrameWrapper (object):
             append_temp_times = []
             append_wrapper = None
             self.dframe = None
-            for row in reader.read_iter(step=step):
+            for row in reader.read_iter(start=from_index, stop=to_index, step=step):
                 if append_count == 0:
                     if isinstance(row, dict):
                         append_wrapper = lambda x: x

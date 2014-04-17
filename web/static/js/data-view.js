@@ -1,5 +1,5 @@
 
-var tauApp = angular.module("tauApp", ["mgcrea.ngStrap", "ngAnimate", "ngSanitize", "ngTagsInput", "ngGrid", "JSONedit"])
+var tauApp = angular.module("tauApp", ["mgcrea.ngStrap", "ngAnimate", "ngSanitize", "ngTagsInput", "ngGrid", "JSONedit", "slick"])
              .config(function($selectProvider) {
                  angular.extend($selectProvider.defaults, {
                      sort: false
@@ -49,7 +49,83 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
         refresh: false,
         data: null,
         series_data: null,
-        summary: null
+        summary: null,
+        search: null
+    };
+
+    $scope.searchResult = [];
+    $scope.$on('searchResult', function (ev, result) {
+        var html = '<stock buttons="false" series="ctx.series" handler="ctx.handler" watcher="ctx.watcher" width="180" height="90"></stock>';
+        var ctx = function (data, index) { var local = $.extend(true, [], data); return {index: index, series: null, 
+                     handler: function (renderTarget, attrs, series, updateFunction) {
+                     var indata = this;
+                     var options = {
+                       credits: { enabled: false },
+                       rangeSelector : { enabled: false },
+                       title : { enabled: false },
+                       exporting: { enabled: false },
+                       navigator: { enabled: false },
+                       scrollbar: { enabled: false },
+                       tooltip: { enabled: false },
+                       xAxis: [ { lineWidth: 0, tickLength: 0, labels: { enabled: false }, ticks: { enabled: false } } ],
+                       yAxis: [ { gridLineWidth: 0, labels: { enabled: false } } ],
+                       chart: {
+                         renderTo: renderTarget,
+                         type: "ohlc",
+                         height: attrs.height || null,
+                         width: attrs.width || null,
+                         zoomType: 'x',
+                         events: {
+                           selection: function(event) {
+                             return false;
+                           }
+                         }
+                       },
+                       series: [{
+                         type: "ohlc",
+                         name: "OHLC",
+                         data : indata,
+                         dataGrouping : { enabled: false }
+                       }],
+                       plotOptions: {
+                         ohlc: {turboThreshold: 10000},
+                         series: {marker: {enabled: false}},
+                         scatter: {tooltip: {pointFormat: "{point.name}"}}
+                       }
+                     };//options
+                     updateFunction(options);
+                     }.bind(local), 
+                     watcher: true}; };
+          $scope.searchResult = [];
+          var index = 0;
+          result.match.forEach(function (match) {
+              $scope.searchResult.push({html: html, ctx: ctx(match.data, index)});
+              index += 1;
+          });
+    });
+
+    $scope.transform = function (script, action, state) {
+        var params = { params: { id: $scope.instance.id,
+                                 start: $scope.state.current,
+                                 end: Math.min($scope.state.summary.imax, ($scope.state.current + $scope.state.window)),
+                                 format: "transform",
+                                 script: JSON.stringify(script)
+                               }
+        };
+        $scope.$broadcast("transform", params, action, state); 
+        /*
+        var params = { params: { id: $scope.instance.id,
+                                 start: $scope.state.current,
+                                 end: Math.min($scope.state.summary.imax, ($scope.state.current + $scope.state.window)),
+                                 format: "transform",
+                                 script: "{}"
+                               }
+                     };
+        $http.get("/api/data", params).success( function (data) {
+            $scope.state.data = data;
+            $scope.state.series_data = data.data;
+            $scope.loading = false;
+        });*/
     };
 
     $scope.selectPoint = function (point) {
@@ -145,7 +221,6 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
             });
         }
     });
-
     $scope.plotOhlc = function (renderTarget, attrs, series, updateFunction) {
 
         var indata = [];
@@ -162,9 +237,34 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
                 type: "ohlc",
                 height: attrs.height || null,
                 width: attrs.width || null,
-                zoomType: "x"
+                zoomType: 'x',
+                events: {
+                    selection: function(event) {
+                       return event.currentTarget.selectionHandler(event); 
+                    }
+                }
+            },
+            exporting : {
+                buttons: {
+                    customButton: {
+                        x: -62,
+                        symbol: 'circle',
+                        menuItems: [
+                            { text: 'PIPs',
+                              onclick: function () { $scope.transform({type: 'pip'}, "", $scope.state); } },
+                            { text: 'SAX',
+                              onclick: function () { $scope.transform({type: 'sax', method: 'pip'}, "", $scope.state); } },
+                            { text: 'Search',
+                              onclick: function () { $scope.transform({type: 'search', method: 'pip'}, "search", $scope.state); } }
+                        ]
+                    }
+                }
             },
             navigator : {
+                handles: {
+                    backgroundColor: 'transparent',
+                    borderColor: 'transparent'
+                },
                 adaptToUpdatedData: true,
                 xAxis: {
                     dateTimeLabelFormats: {
@@ -187,10 +287,15 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
                 text: attrs.title || null
             },
             tooltip: {
+                crosshairs: [false,false],
+                enabled: true,
                 valueDecimals: 6,
                 xDateFormat: "%Y-%m-%d %H:%M:%S%L",
                 formatter: function() {
+                    if (!this.points[0].series.chart.tooltipEnabled) return false;
                     var series = this.points[0].series;
+                    if (series.hasOwnProperty("id") && series.id.indexOf("t:") == 0) return;
+
                     var chart = series.chart;
                     var out = Highcharts.dateFormat("%Y-%m-%d %H:%M:%S.%L", this.x);
                     var index = 0;
@@ -203,10 +308,12 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
                                       + "<b>Close</b> " + series.data[index].close;
                         }
                         else if (series.name != "Navigator") {
+                            try {
                             var value = series.data[index].y;
                             if (value != null) {
                                 out += "<br/><b>" + series.name + "</b> " + series.data[index].y;
                             }
+                            } catch (e) {}
                         }
                     });
                     return out;
@@ -296,9 +403,13 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
                 type: "line",
                 height: attrs.height || null,
                 width: attrs.width || null,
-                zoomType: "x"
+                zoomType: null
             },
             navigator : {
+                handles: {
+                    backgroundColor: 'transparent',
+                    borderColor: 'transparent'
+                },
                 adaptToUpdatedData: false,
                 series: { 
                     dataGrouping: { enabled: false },
@@ -1199,7 +1310,153 @@ tauApp.controller("SeriesSearch", function ($rootScope, $scope, $http, $q, $time
     });
 });
 
-tauApp.directive('stock', function () {
+tauApp.directive('stock', function ($http, $compile) {
+    return {
+        restrict: 'E',
+        template: '<div></div>',
+        scope: {
+            series: '=',
+            handler: '=',
+            watcher: '=',
+            enable_buttons: '=?buttons'
+        },
+        transclude:true,
+        replace: true,
+
+        link: function (scope, element, attrs) {
+
+            Highcharts.setOptions({ global : { useUTC : true } });
+
+            scope.$on('unzoom', function (ev) {
+                scope.chart.zoomOut();
+            });
+
+            scope.$on('transform', function (ev, params, action, state) {
+                params.params.start = params.params.start + scope.chart.series[0].cropStart;
+                params.params.end = params.params.start + scope.chart.series[0].points.length;
+                scope.$apply(function(){
+                    $http.get("/api/data", params).success( function (data) {
+                        //var series = { id: 'pips', name: 'pips', type: 'line', data: data.data };
+                        if (action == "search") {
+                            //state.search = data;
+                            scope.$emit("searchResult", data);
+                        } else {
+                            for (var index=0; index < data.series.length; index++) {
+                                var series = data.series[index];
+                                series.dataLabels = {enabled: true, formatter: function () { if (typeof this.point.l == "undefined") { return null; } else { return "<b>" + this.point.l + "</b>";} }, backgroundColor: "rgba(255,0,0, 0.9);", borderRadius: 2, borderColor: "rgba(200, 200, 200, 0.9);", borderWidth: 1, color: "rgba(255,255,255,0.9);"};
+                                scope.chart.addSeries(series);
+                            }
+                        }
+                    });
+                });
+            });
+
+            scope.chartState = {
+                crosshairs: false,
+                info: false,
+                zoomable: false,
+                zoomed: false
+            };
+
+            scope.toggleChartState = function (target) {
+                console.log(target);
+                if (target == "crosshairs") {
+                    scope.chartState.crosshairs = !scope.chartState.crosshairs;
+                } else if (target == "info") {
+                    scope.chartState.info = !scope.chartState.info;
+                    scope.chart.tooltipEnabled = scope.chartState.info;
+                } else if (target == "zoom") {
+                    scope.chart.zoomOut();
+                    scope.chartState.zoomable = !scope.chartState.zoomable;
+                }
+            };
+
+            scope.$watch( function () { return scope.watcher }, function (value) {
+                if (!value) return;
+
+                scope.handler(element[0], attrs, scope.series, function (options) {
+                    scope.chart = new Highcharts.StockChart(options);
+                    scope.chart.tooltipEnabled = false;
+                    scope.chart.selectionHandler = function (event) {
+                        return scope.chartState.zoomable;
+                        //Highcharts.dateFormat('%Y-%m-%d %H:%M:%S', event.xAxis[0].min),
+                        //Highcharts.dateFormat('%Y-%m-%d %H:%M:%S', event.xAxis[0].max)
+                        //console.log(event.yAxis[0].min, event.yAxis[0].max);
+                    };
+                    if (scope.enable_buttons && !scope.buttons) {
+                        scope.buttons = angular.element("<div />").css({top: "70px", left: "100px", position: "absolute"});
+                        scope.buttons.append("<button class='btn btn-primary btn-xs' type='button' ng-click='toggleChartState(\"crosshairs\")'><i class='fa fa-crosshairs icon-white' style='width: 15px;'></i></button><span> </span>");
+                        scope.buttons.append("<button class='btn btn-primary btn-xs' type='button' ng-click='toggleChartState(\"info\")'><i class='fa fa-info icon-white' style='width: 15px;'></i></button><span> </span>");
+                        scope.buttons.append("<button class='btn btn-primary btn-xs' type='button' ng-click='toggleChartState(\"zoom\")'><i class='fa fa-search-plus icon-white' style='width: 15px;'></i></button><span> </span>");
+                        scope.buttons.append("<div class='btn-group dropdown'><button class='btn btn-primary btn-xs' type='button' ng-click='toggleChartState(\"zoom\")' data-toggle='dropdown'><i class='fa fa-compass icon-white' style='width: 15px;'></i></button><ul class='dropdown-menu'><li>test1</li><li>test2</li></ul></div>");
+
+                        $compile(scope.buttons)(scope);
+                        element.append(scope.buttons);
+                    }
+                });                
+            });
+
+            element.on('mousemove', function (event) {
+                var chart = scope.chart;
+                var x = event.offsetX, //pageX,
+                    y = event.offsetY, //pageY,
+                    path = ['M', chart.plotLeft, y,
+                            'L', chart.plotLeft + chart.plotWidth, y,
+                            'M', x, chart.plotTop,
+                            'L', x, chart.plotTop + chart.plotHeight];
+          
+                if (!scope.chartState.crosshairs) {
+                    
+                    if (chart.crossLines) { $(chart.crossLines.element).remove(); chart.crossLines = null; }
+                    if (chart.crossLabel) { $(chart.crossLabel.element).remove(); chart.crossLabel = null; }
+                    if (chart.labelRect) { $(chart.labelRect.element).remove(); chart.labelRect = null; }
+                    return;
+                }
+
+                if (chart.crossLines) {
+                    chart.crossLines.attr({d: path});
+                } else {
+                    chart.crossLines = chart.renderer.path(path).attr({
+                        'stroke-width': 0.6,
+                        stroke: 'gray',
+                        'stroke-dasharray': "5,5",
+                        zIndex: 10
+                    }).add();
+                }
+        
+                if (chart.crossLabel) {
+                    chart.crossLabel.attr({
+                        y: y + 15,
+                        text: chart.yAxis[0].toValue(y).toFixed(2)
+                    });
+                    chart.crossLabel.attr({
+                        x: (chart.plotWidth - chart.crossLabel.getBBox().width)
+                    });
+                    chart.labelRect.attr({
+                        y: y + 4,
+                        width: chart.crossLabel.getBBox().width + 8,
+                        x: chart.crossLabel.getBBox().x - 4
+                    });
+                } else {
+                    chart.labelRect = chart.renderer.rect(chart.plotLeft + chart.plotWidth - 60, y +4, 55, 15, 2).attr({
+                        fill: '#4572A7',
+                        'stroke-width': 0,
+                        stroke: 'gray',
+                        'stroke-width': 1,
+                        zindex: -1
+                    }).add();
+                    chart.crossLabel = chart.renderer.text(chart.yAxis[0].toValue(y).toFixed(2), chart.plotLeft + chart.plotWidth - 40, y + 15).css({
+                        color: '#ffffff',
+                        border: '1px solid #ff0000;',
+                        fontSize: '9px',
+                    }).add();
+                }
+            });
+        }
+    };
+});
+
+tauApp.directive('search', function ($http, $compile) {
     return {
         restrict: 'E',
         template: '<div></div>',
@@ -1212,20 +1469,10 @@ tauApp.directive('stock', function () {
         replace: true,
 
         link: function (scope, element, attrs) {
-
+            
             Highcharts.setOptions({ global : { useUTC : true } });
-
-            scope.$on('unzoom', function (ev) {
-                    scope.chart.zoomOut();
-                });
-
-            scope.$watch( function () { return scope.watcher }, function (value) {
-                if (!value) return;
-
-                scope.handler(element[0], attrs, scope.series, function (options) {
-                    scope.chart = new Highcharts.StockChart(options);
-                });                
-            });
+            element.html("<slick infinite=false dots=true slides-to-show=6 slides-to-scroll=1 items='series'></slick>").show();
+            $compile(element.contents())(scope);
         }
     };
 });

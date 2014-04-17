@@ -19,6 +19,11 @@ parser.addArgument(
 );
 
 parser.addArgument(
+    [ "-b2", "--backend2"],
+    { help: "B2" }
+);
+
+parser.addArgument(
     [ "-p", "--port"],
     { help: "Port eg: 3000" }
 );
@@ -86,8 +91,16 @@ app.get(/^\/api\/.*/, function (req, res)
 
 app.post(/^\/api\/.*/, function (req, res)
 {
+    req.setTimeout(180000);
     req.pipe(request.post(url.resolve(args.backend, req.url))).pipe(res);
     //request.post({url: url.resolve(args.backend, req.url), headers: req.headers, body: req.body}).pipe(res);
+});
+
+app.post(/^\/api2\/.*/, function (req, res)
+{
+    console.log("API2 REQUEST");
+    console.log(url.resolve(args.backend2, req.url));
+    req.pipe(request.post(url.resolve(args.backend2, req.url))).pipe(res);
 });
 
 // Server
