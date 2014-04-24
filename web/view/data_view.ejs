@@ -100,7 +100,7 @@
                                 </div>
                                 <button class="btn btn-primary btn-xs" type="button" ng-click="move(1)"><i class="fa fa-forward icon-white"></i></button>
                                 <button class="btn btn-primary btn-xs" type="button" ng-click="end()"><i class="fa fa-fast-forward icon-white"></i></button>
-                                <button class="btn btn-primary btn-xs" type="button" ng-click="unzoom()"><i class="fa fa-search-minus icon-white"> unzoom</i></button>
+                                <button class="btn btn-primary btn-xs" type="button" ng-click="test()"><i class="fa fa-search-minus icon-white"> unzoom</i></button>
                                 <button class="btn btn-primary btn-xs" type="button" ng-click="toggle()"><i class="fa fa-eye icon-white"> toggle</i></button>
                                 <button class="btn btn-primary btn-xs" type="button" ng-click="toggle(true)"><i class="fa fa-eye-slash icon-white"> split</i></button>
                                 <div class="input-group">
@@ -119,7 +119,8 @@
                         </div>
                         <div class="panel-inner">
                             <div style="height: 500px; width:100%; z-index: 1000; position: absolute; top: 0; right: 0; background: url(img/load.gif) no-repeat center scroll;" ng-if="loading"></div>
-                            <stock ng-if="state.view == 'plot' || state.view == 'plot_grid'" series="instance" handler="plotHandler" watcher="state.data" height="500"></stock>
+                            <stock ng-if="state.view == 'plot' || state.view == 'plot_grid'" buttons="true" series="instance" handler="plotHandler" watcher="state.data" height="500"></stock>
+                            <search ng-if="(state.view == 'plot' || state.view == 'plot_grid')" series="searchResult" overlay="searchOverlay" handler="searchHandler" watcher="state.search" height="100"></search>
                             <div class="price-grid" style="height: 500px;" ng-if="state.view == 'grid' || state.view == 'plot_grid'" ng-grid="gridHandler(instance)"></div>
                         </div>
                     </div>

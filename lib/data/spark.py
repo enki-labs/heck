@@ -1,6 +1,6 @@
 import matplotlib
 import io
-import Image
+from PIL import Image
 from pylab import *
 
 # set engine

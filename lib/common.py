@@ -52,6 +52,9 @@ if store_engine == "hdfs":
 elif store_engine == "posix":
     from lib.store import posix
     store = posix.Store()
+elif store_engine == "s3":
+    from lib.store import s3
+    store = s3.Store()
 else:
     raise Exception("Unknown storage engine (%s)" % (store_engine))
 
@@ -214,9 +217,15 @@ class Path (object):
     @staticmethod
     def resolve_path (typ, info):
         if typ == "series_ohlc":
-            return "data/store/ohlc/%s" % (info.id)
+            if store_engine == "s3":
+                return "store/ohlc/%s" % (info.id)
+            else:
+                return "data/store/ohlc/%s" % (info.id)
         elif typ == "series_tick":
-            return "data/store/tick/%s" % (info.id)
+            if store_engine == "s3":
+                return "store/tick/%s" % (info.id)
+            else:
+                return "data/store/tick/%s" % (info.id)
         else:
             raise Exception("Unknown path type (%s)" % typ)
 

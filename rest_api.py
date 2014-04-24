@@ -19,7 +19,7 @@ import datetime
 from datetime import timedelta
 from babel.dates import format_timedelta
 
-from config import prod
+from config import prod2
 from lib import schema
 from lib import data
 from lib import common
@@ -167,7 +167,7 @@ class Data (Resource):
             print("format=%s" % read_format)
 
             if read_format == "transform":
-                if last_response["val"]:
+                if False and last_response["val"]:
                     response = last_response["val"]
                 else: 
                     response = scripting.transform(json.loads(request.args[b"script"][0].decode("utf-8")), read_series, read_format, from_index, to_index)

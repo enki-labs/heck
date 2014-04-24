@@ -366,6 +366,17 @@
     height: 84px !important;
 }
 
+.search-result-time {
+    font-size: 80%;
+    color: rgba(42, 159, 214, 1.0);
+    text-align: center;
+}
+
+.chart-dropdown {
+    background: rgba(42, 159, 214, 1.0) !important;
+    color: rgba(255, 255, 255, 1.0) !important;
+}
+
 h4 {
     color: rgb(51, 51, 51);
 }

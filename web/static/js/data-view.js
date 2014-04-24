@@ -1,5 +1,5 @@
 
-var tauApp = angular.module("tauApp", ["mgcrea.ngStrap", "ngAnimate", "ngSanitize", "ngTagsInput", "ngGrid", "JSONedit", "slick"])
+var tauApp = angular.module("tauApp", ["mgcrea.ngStrap", "mgcrea.ngStrap.tooltip", "mgcrea.ngStrap.popover", "ngAnimate", "ngSanitize", "ngTagsInput", "ngGrid", "JSONedit", "slick"])
              .config(function($selectProvider) {
                  angular.extend($selectProvider.defaults, {
                      sort: false
@@ -54,54 +54,60 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
     };
 
     $scope.searchResult = [];
+    $scope.searchOverlay = [];
     $scope.$on('searchResult', function (ev, result) {
-        var html = '<stock buttons="false" series="ctx.series" handler="ctx.handler" watcher="ctx.watcher" width="180" height="90"></stock>';
-        var ctx = function (data, index) { var local = $.extend(true, [], data); return {index: index, series: null, 
+
+        $scope.searchResult = [];
+        $scope.searchOverlay = result.normalize;
+        for (var index=0; index<result.match.length; index++) {
+        //result.match.forEach(function (match) {
+              var context = result.match[index];
+              var option = {html: '<div cell-datetime cellclass="search-result-time" value="' + context.data[0].x + '"></div><stock buttons="false" contextindex="' + index + '" series="ctx_items" handler="ctx_items" watcher="ctx_items" width="180" height="90"></stock>', 
+               ctx: {series: null,
+                     index: index, 
                      handler: function (renderTarget, attrs, series, updateFunction) {
-                     var indata = this;
-                     var options = {
-                       credits: { enabled: false },
-                       rangeSelector : { enabled: false },
-                       title : { enabled: false },
-                       exporting: { enabled: false },
-                       navigator: { enabled: false },
-                       scrollbar: { enabled: false },
-                       tooltip: { enabled: false },
-                       xAxis: [ { lineWidth: 0, tickLength: 0, labels: { enabled: false }, ticks: { enabled: false } } ],
-                       yAxis: [ { gridLineWidth: 0, labels: { enabled: false } } ],
-                       chart: {
-                         renderTo: renderTarget,
-                         type: "ohlc",
-                         height: attrs.height || null,
-                         width: attrs.width || null,
-                         zoomType: 'x',
-                         events: {
-                           selection: function(event) {
-                             return false;
-                           }
-                         }
-                       },
-                       series: [{
-                         type: "ohlc",
-                         name: "OHLC",
-                         data : indata,
-                         dataGrouping : { enabled: false }
-                       }],
-                       plotOptions: {
-                         ohlc: {turboThreshold: 10000},
-                         series: {marker: {enabled: false}},
-                         scatter: {tooltip: {pointFormat: "{point.name}"}}
-                       }
-                     };//options
-                     updateFunction(options);
-                     }.bind(local), 
-                     watcher: true}; };
-          $scope.searchResult = [];
-          var index = 0;
-          result.match.forEach(function (match) {
-              $scope.searchResult.push({html: html, ctx: ctx(match.data, index)});
-              index += 1;
-          });
+                         var indata = this.data;
+                         var options = {
+                             credits: { enabled: false },
+                             rangeSelector : { enabled: false },
+                             title : { enabled: false },
+                             exporting: { enabled: false },
+                             navigator: { enabled: false },
+                             scrollbar: { enabled: false },
+                             tooltip: { enabled: false },
+                             xAxis: [ { lineWidth: 0, tickLength: 0, labels: { enabled: false }, ticks: { enabled: false } } ],
+                             yAxis: [ { gridLineWidth: 0, labels: { enabled: false } } ],
+                             chart: {
+                                 renderTo: renderTarget,
+                                 type: "ohlc",
+                                 height: attrs.height || null,
+                                 width: attrs.width || null,
+                                 zoomType: 'x',
+                                 events: {
+                                     selection: function(event) {
+                                         return false;
+                                     }
+                                 }
+                             },
+                             series: [{
+                                 type: "ohlc",
+                                 name: "OHLC",
+                                 data : indata,
+                                 dataGrouping : { enabled: false }
+                             }],
+                             plotOptions: {
+                                 ohlc: {turboThreshold: 10000},
+                                 series: {marker: {enabled: false}},
+                                 scatter: {tooltip: {pointFormat: "{point.name}"}}
+                             }
+                         };//options
+                         updateFunction(options);
+                     }.bind($.extend(true, {}, result.match[index])), 
+                     watcher: true
+                  }
+              };
+              $scope.searchResult.push(option);
+          }
     });
 
     $scope.transform = function (script, action, state) {
@@ -245,7 +251,7 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
                 }
             },
             exporting : {
-                buttons: {
+                /*buttons: {
                     customButton: {
                         x: -62,
                         symbol: 'circle',
@@ -258,7 +264,7 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
                               onclick: function () { $scope.transform({type: 'search', method: 'pip'}, "search", $scope.state); } }
                         ]
                     }
-                }
+                }*/
             },
             navigator : {
                 handles: {
@@ -340,6 +346,7 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
                 name: "OHLC",
                 data : indata,
                 dataGrouping : { enabled: false },
+                color: "rgba(42,159,214,0.8)",
                 point: { events: { click: function () { $scope.selectPoint(this); } } }
             },
             {
@@ -347,13 +354,15 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
                 name: "Actual",
                 data: $scope.state.data.actual,
                 visible: false,
-                dataGrouping: { enabled: false }
+                dataGrouping: { enabled: false },
+                color: "rgba(42,159,214,0.8)"
             },
             {  
                 type: "column",
                 name: "Volume",
                 data: $scope.state.data.volume,
                 dataGrouping: {enabled: false},
+                color: "rgba(42,159,214,0.8)",
                 yAxis: 1
             }],
             xAxis: {  
@@ -367,9 +376,12 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
             },
             {  
                 title: {text: "Volume"},
-                top: 300,
-                height: 100,
-                offset: 0
+                top: 320,
+                height: 80,
+                offset: -40,
+                gridLineWidth: 1,
+                gridLineColor: "rgba(255,255,255,1)",
+                plotBands: [{color: "rgba(220,220,220,0.3)", from: 0, to: 10000000000}]
             }],
             plotOptions: {  
                 ohlc: {turboThreshold: 10000},
@@ -436,6 +448,7 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
                 type: "line",
                 name: "Price",
                 data : indata,
+                color: "rgba(42,159,214,0.8)",
                 dataGrouping : { enabled: false },
                 point: { events: { click: function () { $scope.selectPoint(this); } } }
             },
@@ -443,6 +456,7 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
                 type: "column",
                 name: "Volume",
                 data: $scope.state.data.volume,
+                color: "rgba(42,159,214,0.8)",
                 dataGrouping: {enabled: false},
                 yAxis: 1
             }],
@@ -456,10 +470,13 @@ tauApp.controller("SeriesView", function ($rootScope, $scope, $http, $timeout, $
                 height: 300
             }, 
             {
-                title: {text: "Volume"}, 
-                top: 300, 
-                height: 100, 
-                offset: 0
+                title: {text: "Volume"},
+                top: 320,
+                height: 80,
+                offset: -40,
+                gridLineWidth: 1,
+                gridLineColor: "rgba(255,255,255,1)",
+                plotBands: [{color: "rgba(220,220,220,0.3)", from: 0, to: 10000000000}]
             }],
             plotOptions: {
                 line: { turboThreshold: 10000 },
@@ -1310,11 +1327,140 @@ tauApp.controller("SeriesSearch", function ($rootScope, $scope, $http, $q, $time
     });
 });
 
-tauApp.directive('stock', function ($http, $compile) {
+tauApp.directive('searchboxZZ', function ($http, $compile) {
+
     return {
         restrict: 'E',
         template: '<div></div>',
         scope: {
+            data: '='
+        },
+        transclude: true,
+        replace: true,
+        link: function (scope, element, attrs) {
+            
+        }
+    };
+});
+
+
+function RangePicker(chart) {
+    this.chart = chart;
+    var chartOptions = chart.options;
+    this.handles = [];
+    this.elementsToDestroy = [];
+    this.rendered = false;
+    this.xAxis = chart.xAxis[0];
+    this.navigatorOptions = chartOptions.navigator;
+    this.init();
+};
+
+RangePicker.prototype = {
+    drawHandle: function (x, index) {
+        var picker = this,
+            chart = picker.chart,
+            renderer = chart.renderer,
+            elementsToDestroy = picker.elementsToDestroy,
+            handles = picker.handles,
+            handlesOptions = picker.navigatorOptions.handles,
+            attr = {
+                fill: '#CCCCCC',//handlesOptions.backgroundColor,
+                stroke: '#999999',//handlesOptions.borderColor,
+                'stroke-width': 1
+            },
+            tempElem;
+        if (!picker.rendered) {
+            handles[index] = renderer.g('picker-handle-' + ['left', 'right'][index])
+                             .css({ cursor: 'e-resize' })
+                             .attr({ zIndex: 14 - index }) // zIndex = 3 for right handle, 4 for left
+                             .on('mousedown', function () { console.log(this); return false; })
+                             .add();
+            tempElem = renderer.rect(-4.5, 0, 9, 16, 0, 1)
+				.attr(attr)
+				.add(handles[index]);
+            elementsToDestroy.push(tempElem);
+            tempElem = renderer.path([
+					'M',
+					-1.5, 4,
+					'L',
+					-1.5, 12,
+					'M',
+					0.5, 4,
+					'L',
+					0.5, 12
+				]).attr(attr)
+				.add(handles[index]);
+            elementsToDestroy.push(tempElem);
+        }
+
+        handles[index][false ? 'animate' : 'attr']({
+			translateX: x+10,//picker.left + parseInt(x, 10),
+			translateY: 150+5//picker.top + picker.height / 2 - 8
+        });
+    },
+
+    render: function (min, max) {
+        var picker = this;
+        var renderer = picker.chart.renderer;
+        var pxMin = picker.xAxis.translate(min);
+	var pxMax = picker.xAxis.translate(max);
+        if (picker.xAxis.translate(pxMax, true) - picker.xAxis.translate(pxMin, true) < picker.chart.xAxis[0].minRange) {
+	    return;
+	}
+        if (!picker.rendered) {
+            picker.group = picker.chart.series[0].group;
+            picker.outline = renderer.path()
+		         	.attr({
+					'stroke-width': picker.navigatorOptions.outlineWidth,
+					stroke: picker.navigatorOptions.outlineColor
+				})
+	                       .add(picker.group);
+        }
+        var verb = picker.chart.isResizing ? 'animate' : 'attr';
+        var halfOutline = picker.navigatorOptions.outlineWidth / 2;
+        var outlineTop = 1;
+        var outlineHeight = 299;
+        picker.outline[verb]({ d: [
+				'M',
+				pxMin, outlineTop,
+				'L',
+				pxMin, outlineTop,
+				pxMin, outlineTop + outlineHeight,
+                                pxMax, outlineTop + outlineHeight,
+                                pxMax, outlineTop,
+                                pxMin, outlineTop
+				//'L',
+				//pxMin, outlineTop,
+                                //pxMax, outlineTop,
+				//'L',
+				//pxMax, outlineTop - outlineHeight,
+				//pxMin, outlineTop - outlineHeight
+			].concat(true ? [
+				//'M',
+				//halfOutline, outlineTop, // upper left of zoomed range
+				//'L',
+				//halfOutline, outlineTop // upper right of z.r.
+			] : [])});
+        // draw handles
+	picker.drawHandle(pxMin, 0);
+	picker.drawHandle(pxMax, 1);
+        picker.rendered = true;
+    },
+
+    init: function () {
+    }
+};
+
+
+
+
+
+tauApp.directive('stock', function ($http, $compile, $popover) {
+    return {
+        restrict: 'E',
+        template: '<div></div>',
+        scope: {
+            contextindex: '@?',
             series: '=',
             handler: '=',
             watcher: '=',
@@ -1326,15 +1472,32 @@ tauApp.directive('stock', function ($http, $compile) {
         link: function (scope, element, attrs) {
 
             Highcharts.setOptions({ global : { useUTC : true } });
+            scope.ctx = false;
+            if (typeof scope.contextindex !== "undefined") {
+                scope.ctx = true;
+                var index = parseInt(scope.contextindex);
+                scope.ctx_series = scope.series[index].ctx.series;
+                scope.ctx_handler = scope.handler[index].ctx.handler;
+                scope.ctx_watcher = true;//scope.watcher[0].ctx.watcher;
+            }
 
             scope.$on('unzoom', function (ev) {
                 scope.chart.zoomOut();
             });
 
-            scope.$on('transform', function (ev, params, action, state) {
-                params.params.start = params.params.start + scope.chart.series[0].cropStart;
-                params.params.end = params.params.start + scope.chart.series[0].points.length;
-                scope.$apply(function(){
+            scope.transform = function (script, action, from, to) {
+
+               var params = { params: { id: scope.series.id,
+                                 start: Math.max(0, from),
+                                 end: Math.min(scope.$parent.state.summary.imax, to),
+                                 format: "transform",
+                                 script: JSON.stringify(script)
+                               }
+                };
+
+                //params.params.start = params.params.start + scope.chart.series[0].cropStart;
+                //params.params.end = params.params.start + scope.chart.series[0].points.length;
+                //scope.$apply(function(){
                     $http.get("/api/data", params).success( function (data) {
                         //var series = { id: 'pips', name: 'pips', type: 'line', data: data.data };
                         if (action == "search") {
@@ -1348,8 +1511,8 @@ tauApp.directive('stock', function ($http, $compile) {
                             }
                         }
                     });
-                });
-            });
+                //});
+            };
 
             scope.chartState = {
                 crosshairs: false,
@@ -1357,6 +1520,65 @@ tauApp.directive('stock', function ($http, $compile) {
                 zoomable: false,
                 zoomed: false
             };
+
+            var getIndex = function (event, series) {
+                var x0 = event.xAxis[0].min; var x1 = event.xAxis[0].max;
+                var x0index = null; var x1index = null;
+                for (var i=0; i<series.data.length; i++) {
+                    if (x0index == null && series.data[i].x >= x0) {
+                        x0index = i;
+                    } else if (x0index != null && series.data[i].x > x1) {
+                        break;
+                    }
+                    x1index = i;
+                }
+                return [Math.max(0, x0index+scope.$parent.state.current), Math.min(scope.$parent.state.summary.imax, x1index+scope.$parent.state.current)];
+            };
+
+            scope.resetSelection = function () {
+                 scope.chart.selectionHandler = function (event) {
+                        return scope.chartState.zoomable;
+                 };
+            };
+
+            scope.transform_actions = [];
+            scope.transform_actions.push({ name: "PIPs",
+                                           handle: function () { 
+                                               scope.chart.selectionHandler = function (event) {
+                                                   scope.resetSelection();
+                                                   var indexes = getIndex(event, this.series[0]);
+                                                   scope.transform({type: 'pip'}, "", indexes[0], indexes[1]); 
+                                                   return false;
+                                               };
+                                           }
+                                         });
+            scope.transform_actions.push({ name: "SAX",
+                                           handle: function () { 
+                                               scope.chart.selectionHandler = function (event) {
+                                                   scope.resetSelection();
+                                                   var indexes = getIndex(event, this.series[0]);
+                                                   scope.transform({type: 'sax', method: 'pip'}, "", indexes[0], indexes[1]);
+                                                   return false;
+                                               };
+                                           }
+                                         });
+
+            scope.transform_actions.push({ name: "Search",
+                                           handle: function () { 
+                                               scope.rangePicker = new RangePicker(scope.chart);
+                                               //var x = scope.chart.xAxis[0].getExtremes();
+                                               //s.render(x.min+1000000000, x.max-1000000000);
+                                               //s.render(894763200000,914500800000);
+                                               //var myPopover = $popover(element, {placement: 'top-left', title: 'My Title', content: 'My Content'});
+                                               scope.chart.selectionHandler = function (event) {
+                                                   //scope.resetSelection();
+                                                   //var indexes = getIndex(event, this.series[0]);
+                                                   scope.rangePicker.render(event.xAxis[0].min, event.xAxis[0].max);
+                                                   //scope.transform({type: 'search', method: 'pip'}, "search", indexes[0], indexes[1]); 
+                                                   return false; 
+                                               };
+                                           }
+                                         });
 
             scope.toggleChartState = function (target) {
                 console.log(target);
@@ -1371,6 +1593,31 @@ tauApp.directive('stock', function ($http, $compile) {
                 }
             };
 
+            if (scope.ctx) {
+                scope.$watch( function () { return scope.ctx_watcher }, function (value) {
+                    if (!value) return;
+                    scope.ctx_handler(element[0], attrs, scope.ctx_series, function (options) {
+                    scope.chart = new Highcharts.StockChart(options);
+                    scope.chart.tooltipEnabled = false;
+                    scope.chart.selectionHandler = function (event) {
+                        return scope.chartState.zoomable;
+                        //Highcharts.dateFormat('%Y-%m-%d %H:%M:%S', event.xAxis[0].min),
+                        //Highcharts.dateFormat('%Y-%m-%d %H:%M:%S', event.xAxis[0].max)
+                        //console.log(event.yAxis[0].min, event.yAxis[0].max);
+                    };
+                    if (scope.enable_buttons && !scope.buttons) {
+                        scope.buttons = angular.element("<div />").css({top: "70px", left: "100px", position: "absolute"});
+                        scope.buttons.append("<button class='btn btn-primary btn-xs' type='button' ng-click='toggleChartState(\"crosshairs\")'><i class='fa fa-crosshairs icon-white' style='width: 15px;'></i></button><span> </span>");
+                        scope.buttons.append("<button class='btn btn-primary btn-xs' type='button' ng-click='toggleChartState(\"info\")'><i class='fa fa-info icon-white' style='width: 15px;'></i></button><span> </span>");
+                        scope.buttons.append("<button class='btn btn-primary btn-xs' type='button' ng-click='toggleChartState(\"zoom\")'><i class='fa fa-search-plus icon-white' style='width: 15px;'></i></button><span> </span>");
+                        scope.buttons.append("<div class='btn-group dropdown'><button class='btn btn-primary btn-xs' type='button' data-toggle='dropdown'><i class='fa fa-compass icon-white' style='width: 15px;'></i></button><ul class='dropdown-menu chart-dropdown'><li ng-repeat='action in transform_actions' ng-click='action.handle()'>{{action.name}}</li></ul></div>");
+
+                        $compile(scope.buttons)(scope);
+                        element.append(scope.buttons);
+                    }
+                  });
+                });
+            } else {
             scope.$watch( function () { return scope.watcher }, function (value) {
                 if (!value) return;
 
@@ -1388,13 +1635,14 @@ tauApp.directive('stock', function ($http, $compile) {
                         scope.buttons.append("<button class='btn btn-primary btn-xs' type='button' ng-click='toggleChartState(\"crosshairs\")'><i class='fa fa-crosshairs icon-white' style='width: 15px;'></i></button><span> </span>");
                         scope.buttons.append("<button class='btn btn-primary btn-xs' type='button' ng-click='toggleChartState(\"info\")'><i class='fa fa-info icon-white' style='width: 15px;'></i></button><span> </span>");
                         scope.buttons.append("<button class='btn btn-primary btn-xs' type='button' ng-click='toggleChartState(\"zoom\")'><i class='fa fa-search-plus icon-white' style='width: 15px;'></i></button><span> </span>");
-                        scope.buttons.append("<div class='btn-group dropdown'><button class='btn btn-primary btn-xs' type='button' ng-click='toggleChartState(\"zoom\")' data-toggle='dropdown'><i class='fa fa-compass icon-white' style='width: 15px;'></i></button><ul class='dropdown-menu'><li>test1</li><li>test2</li></ul></div>");
+                        scope.buttons.append("<div class='btn-group dropdown'><button class='btn btn-primary btn-xs' type='button' data-toggle='dropdown'><i class='fa fa-compass icon-white' style='width: 15px;'></i></button><ul class='dropdown-menu chart-dropdown'><li ng-repeat='action in transform_actions' ng-click='action.handle()'>{{action.name}}</li></ul></div>");
 
                         $compile(scope.buttons)(scope);
                         element.append(scope.buttons);
                     }
                 });                
             });
+            }
 
             element.on('mousemove', function (event) {
                 var chart = scope.chart;
@@ -1462,6 +1710,7 @@ tauApp.directive('search', function ($http, $compile) {
         template: '<div></div>',
         scope: {
             series: '=',
+            overlay: '=',
             handler: '=',
             watcher: '='
         },
@@ -1471,7 +1720,53 @@ tauApp.directive('search', function ($http, $compile) {
         link: function (scope, element, attrs) {
             
             Highcharts.setOptions({ global : { useUTC : true } });
-            element.html("<slick infinite=false dots=true slides-to-show=6 slides-to-scroll=1 items='series'></slick>").show();
+
+            scope.overlayHandler = function (renderTarget, attrs, series, updateFunction) {
+
+                if (series.length == 0) return;
+
+                var chartSeries = [];
+                series.forEach(function (s) {
+                    chartSeries.push({type: "line", 
+                                      data: s, 
+                                      dataGrouping: {enabled: false}
+                                     });
+                });
+
+                var options = {
+                    credits: { enabled: false },
+                    rangeSelector : { enabled: false },
+                    title : { enabled: false },
+                    exporting: { enabled: false },
+                    navigator: { enabled: false },
+                    scrollbar: { enabled: false },
+                    tooltip: { enabled: false },
+                    xAxis: [ { lineWidth: 0, tickLength: 0, labels: { enabled: false }, ticks: { enabled: false },
+                               plotBands: { color: "rgba(42,159,214,0.2)", from: 0, to: 10000000} } ],
+                    yAxis: [ { gridLineWidth: 0, labels: { enabled: false } } ],
+                    chart: {
+                        renderTo: renderTarget,
+                        type: "line",
+                        height: attrs.height || null,
+                        width: attrs.width || null,
+                        zoomType: 'x',
+                        events: {
+                            selection: function(event) {
+                                return false;
+                            }
+                        }
+                    },
+                    series: chartSeries,
+                    plotOptions: {
+                        ohlc: {turboThreshold: 10000},
+                        series: {marker: {enabled: false}},
+                        scatter: {tooltip: {pointFormat: "{point.name}"}}
+                    }
+                };//options
+                updateFunction(options);
+            };
+
+            element.html("<stock style='float: left; width: 350px;' buttons='false' series='overlay' handler='overlayHandler' watcher='overlay' width='350' height='200'></stock><slick infinite=false dots=false slides-to-show=6 slides-to-scroll=6 items='series'></slick>").show();
             $compile(element.contents())(scope);
         }
     };
